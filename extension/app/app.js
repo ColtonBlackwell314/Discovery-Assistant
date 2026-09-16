@@ -9,6 +9,7 @@ const NAV = [
   {key:"stakeholders", name:"Stakeholders", icon:"bi-people-fill"},
   {key:"teamstructure", name:"Team Structure", icon:"bi-diagram-3-fill"},
   {key:"transcripts", name:"Transcripts", icon:"bi-mic-fill"},
+  {key:"importexport", name:"Import / Export", icon:"bi-arrow-left-right"},
   {key:"apikey", name:"API Key", icon:"bi-key-fill"}
 ];
 const NOTEBOOK_COLORS = ["#0f6cbd","#1d9e75","#d85a30","#993c1d","#7f77dd","#d4537e","#639922"];
@@ -852,6 +853,7 @@ function renderSplitSecondary(){
   else if(splitNavKey === "stakeholders") renderStakeholders(body);
   else if(splitNavKey === "teamstructure") renderTeamStructure(body);
   else if(splitNavKey === "transcripts") renderTranscripts(body);
+  else if(splitNavKey === "importexport") renderImportExport(body);
   else if(splitNavKey === "apikey") renderApiKeyPage(body);
 }
 
@@ -1118,6 +1120,7 @@ function renderSection(){
   else if(activeNav === "stakeholders") renderStakeholders(body);
   else if(activeNav === "teamstructure") renderTeamStructure(body);
   else if(activeNav === "transcripts") renderTranscripts(body);
+  else if(activeNav === "importexport") renderImportExport(body);
   else if(activeNav === "apikey") renderApiKeyPage(body);
   // If the user navigated to the same page that's in the split pane, close split
   if(splitNavKey && splitNavKey === activeNav) closeSplitView();
@@ -1558,6 +1561,541 @@ function renderMarkdownChat(markdown){
   });
   closeList();
   return html;
+}
+
+/* ---------------- Import / Export (.md markdown) ----------------
+   Exports the entire current project as a single structured .md file that
+   is both human-readable AND machine-parseable for re-import. Another user
+   can import that .md into their own Discovery Assistant and get all notes,
+   stakeholders, team structure, transcripts, and chats merged in — without
+   duplicating anything that already exists. */
+
+function exportProjectToMarkdown(){
+  const s = state;
+  const lines = [];
+  const divider = () => lines.push("");
+
+  lines.push(`# ${s.name || "Untitled project"}`);
+  lines.push(`<!-- D365-DISCOVERY-EXPORT v1 -->`);
+  lines.push(`<!-- Generated: ${new Date().toISOString()} -->`);
+  divider();
+
+  // --- Notes (tree structure) ---
+  lines.push(`## Notes`);
+  divider();
+  const byParent = new Map();
+  (s.items || []).forEach(it => {
+    const key = it.parentId || "__root__";
+    if(!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key).push(it);
+  });
+  function exportItem(item, depth){
+    const prefix = "#".repeat(Math.min(depth + 3, 6)); // ### for root items, #### for children, etc.
+    lines.push(`${prefix} ${item.name}`);
+    if(item.parentId) lines.push(`<!-- parent: ${item.parentId} -->`);
+    lines.push(`<!-- item-id: ${item.id} -->`);
+    if(item.desc && item.desc.trim()){
+      divider();
+      lines.push(item.desc.trim());
+    }
+    divider();
+    const children = byParent.get(item.id) || [];
+    children.forEach(c => exportItem(c, depth + 1));
+  }
+  const roots = byParent.get("__root__") || [];
+  if(roots.length){
+    roots.forEach(it => exportItem(it, 0));
+  } else {
+    lines.push(`_No notes captured yet._`);
+    divider();
+  }
+
+  // --- Stakeholders ---
+  lines.push(`## Stakeholders`);
+  if(s.stakeholdersUpdatedAt) lines.push(`<!-- last-refreshed: ${s.stakeholdersUpdatedAt} -->`);
+  divider();
+  if((s.stakeholders || []).length){
+    s.stakeholders.forEach(p => {
+      lines.push(`### ${p.name || "(unnamed)"}`);
+      if(p.title) lines.push(`- **Role:** ${p.title}`);
+      if(p.team) lines.push(`- **Team:** ${p.team}`);
+      if(p.responsibilities && p.responsibilities.length){
+        lines.push(`- **Responsibilities:**`);
+        p.responsibilities.forEach(r => lines.push(`  - ${r}`));
+      }
+      divider();
+    });
+  } else {
+    lines.push(`_No stakeholders yet._`);
+    divider();
+  }
+
+  // --- Team Structure ---
+  lines.push(`## Team Structure`);
+  if(s.teamStructureUpdatedAt) lines.push(`<!-- last-refreshed: ${s.teamStructureUpdatedAt} -->`);
+  divider();
+  const ts = s.teamStructure || { nodes: [], edges: [] };
+  if(ts.nodes.length){
+    lines.push(`### Nodes`);
+    divider();
+    ts.nodes.forEach(n => {
+      lines.push(`- **${n.label}** (id: \`${n.id}\`, type: \`${n.type}\`)`);
+    });
+    divider();
+    if(ts.edges.length){
+      lines.push(`### Edges`);
+      divider();
+      ts.edges.forEach(e => {
+        lines.push(`- \`${e.from}\` → \`${e.to}\``);
+      });
+      divider();
+    }
+  } else {
+    lines.push(`_No team structure yet._`);
+    divider();
+  }
+
+  // --- Transcripts ---
+  lines.push(`## Transcripts`);
+  divider();
+  if((s.transcripts || []).length){
+    s.transcripts.forEach(t => {
+      lines.push(`### ${t.filename}`);
+      lines.push(`<!-- transcript-id: ${t.id} -->`);
+      lines.push(`<!-- timestamp: ${t.ts} -->`);
+      divider();
+      lines.push(t.text.trim());
+      divider();
+    });
+  } else {
+    lines.push(`_No transcripts imported yet._`);
+    divider();
+  }
+
+  // --- Chats ---
+  lines.push(`## Chats`);
+  divider();
+  if((s.chats || []).length){
+    s.chats.forEach(c => {
+      lines.push(`### ${c.title}`);
+      lines.push(`<!-- chat-id: ${c.id} -->`);
+      lines.push(`<!-- timestamp: ${c.ts} -->`);
+      divider();
+      (c.messages || []).forEach(m => {
+        const role = m.role === "user" ? "**You:**" : m.role === "assistant" ? "**AI:**" : "**Error:**";
+        lines.push(`${role} ${m.text}`);
+        divider();
+      });
+    });
+  } else {
+    lines.push(`_No chats yet._`);
+    divider();
+  }
+
+  return lines.join("\n");
+}
+
+function downloadMarkdown(text, filename){
+  const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+function parseImportMarkdown(text){
+  // Parses the structured .md back into a project-state-shaped object.
+  // Tolerant of minor formatting differences — looks for the section headers
+  // and HTML comments that the export writes.
+  const result = { name: "", items: [], stakeholders: [], teamStructure: { nodes: [], edges: [] }, transcripts: [], chats: [] };
+
+  // Project name from H1
+  const h1 = text.match(/^# (.+)$/m);
+  if(h1) result.name = h1[1].trim();
+
+  // Split into top-level sections by ## headers
+  const sectionRegex = /^## (.+)$/gm;
+  const sectionStarts = [];
+  let m;
+  while((m = sectionRegex.exec(text)) !== null){
+    sectionStarts.push({ name: m[1].trim(), index: m.index });
+  }
+  function sectionText(sectionName){
+    const s = sectionStarts.find(s => s.name.toLowerCase() === sectionName.toLowerCase());
+    if(!s) return "";
+    const sIdx = sectionStarts.indexOf(s);
+    const end = sIdx + 1 < sectionStarts.length ? sectionStarts[sIdx + 1].index : text.length;
+    return text.slice(s.index, end);
+  }
+
+  // --- Parse Notes ---
+  const notesBlock = sectionText("Notes");
+  if(notesBlock){
+    // Find all ### / #### / ##### headers = note items
+    const itemRegex = /^(#{3,6}) (.+)$/gm;
+    const rawItems = [];
+    let im;
+    while((im = itemRegex.exec(notesBlock)) !== null){
+      rawItems.push({ depth: im[1].length - 3, name: im[2].trim(), startIdx: im.index + im[0].length });
+    }
+    rawItems.forEach((ri, idx) => {
+      const endIdx = idx + 1 < rawItems.length ? rawItems[idx + 1].startIdx - rawItems[idx + 1].name.length - rawItems[idx + 1].depth - 4 : notesBlock.length;
+      const body = notesBlock.slice(ri.startIdx, endIdx).trim();
+      // Extract item-id and parent from comments
+      const idMatch = body.match(/<!-- item-id: (.+?) -->/);
+      const parentMatch = body.match(/<!-- parent: (.+?) -->/);
+      // Strip HTML comments from the note body
+      let desc = body.replace(/<!--.*?-->/g, "").trim();
+      // Don't include lines that are just "_No notes..._"
+      if(desc === "_No notes captured yet._") desc = "";
+      const item = {
+        id: idMatch ? idMatch[1] : uid("item"),
+        name: ri.name,
+        parentId: parentMatch ? parentMatch[1] : null,
+        desc: desc,
+        ts: Date.now()
+      };
+      rawItems[idx]._parsed = item;
+      result.items.push(item);
+    });
+  }
+
+  // --- Parse Stakeholders ---
+  const stakeholdersBlock = sectionText("Stakeholders");
+  if(stakeholdersBlock){
+    const shRegex = /^### (.+)$/gm;
+    const shStarts = [];
+    let sm;
+    while((sm = shRegex.exec(stakeholdersBlock)) !== null){
+      shStarts.push({ name: sm[1].trim(), startIdx: sm.index + sm[0].length });
+    }
+    shStarts.forEach((sh, idx) => {
+      const endIdx = idx + 1 < shStarts.length ? shStarts[idx + 1].startIdx - shStarts[idx + 1].name.length - 5 : stakeholdersBlock.length;
+      const body = stakeholdersBlock.slice(sh.startIdx, endIdx).trim();
+      const roleMatch = body.match(/\*\*Role:\*\*\s*(.+)/);
+      const teamMatch = body.match(/\*\*Team:\*\*\s*(.+)/);
+      const resps = [];
+      const respRegex = /^ {2}- (.+)$/gm;
+      let rm;
+      while((rm = respRegex.exec(body)) !== null) resps.push(rm[1].trim());
+      if(sh.name !== "(unnamed)"){
+        result.stakeholders.push({
+          name: sh.name,
+          title: roleMatch ? roleMatch[1].trim() : "",
+          team: teamMatch ? teamMatch[1].trim() : "",
+          responsibilities: resps
+        });
+      }
+    });
+  }
+
+  // --- Parse Team Structure ---
+  const tsBlock = sectionText("Team Structure");
+  if(tsBlock){
+    // Nodes: - **Label** (id: `xxx`, type: `yyy`)
+    const nodeRegex = /- \*\*(.+?)\*\* \(id: `(.+?)`, type: `(.+?)`\)/g;
+    let nm;
+    while((nm = nodeRegex.exec(tsBlock)) !== null){
+      result.teamStructure.nodes.push({ id: nm[2], label: nm[1], type: nm[3] });
+    }
+    // Edges: - `from` → `to`
+    const edgeRegex = /- `(.+?)` → `(.+?)`/g;
+    let em;
+    while((em = edgeRegex.exec(tsBlock)) !== null){
+      result.teamStructure.edges.push({ from: em[1], to: em[2] });
+    }
+  }
+
+  // --- Parse Transcripts ---
+  const transcriptsBlock = sectionText("Transcripts");
+  if(transcriptsBlock){
+    const trRegex = /^### (.+)$/gm;
+    const trStarts = [];
+    let tm;
+    while((tm = trRegex.exec(transcriptsBlock)) !== null){
+      trStarts.push({ filename: tm[1].trim(), startIdx: tm.index + tm[0].length });
+    }
+    trStarts.forEach((tr, idx) => {
+      const endIdx = idx + 1 < trStarts.length ? trStarts[idx + 1].startIdx - trStarts[idx + 1].filename.length - 5 : transcriptsBlock.length;
+      const body = transcriptsBlock.slice(tr.startIdx, endIdx).trim();
+      const idMatch = body.match(/<!-- transcript-id: (.+?) -->/);
+      const tsMatch = body.match(/<!-- timestamp: (.+?) -->/);
+      const content = body.replace(/<!--.*?-->/g, "").trim();
+      if(content && content !== "_No transcripts imported yet._"){
+        result.transcripts.push({
+          id: idMatch ? idMatch[1] : uid("t"),
+          filename: tr.filename,
+          text: content,
+          ts: tsMatch ? Number(tsMatch[1]) : Date.now()
+        });
+      }
+    });
+  }
+
+  // --- Parse Chats ---
+  const chatsBlock = sectionText("Chats");
+  if(chatsBlock){
+    const chatRegex = /^### (.+)$/gm;
+    const chatStarts = [];
+    let cm;
+    while((cm = chatRegex.exec(chatsBlock)) !== null){
+      chatStarts.push({ title: cm[1].trim(), startIdx: cm.index + cm[0].length });
+    }
+    chatStarts.forEach((ch, idx) => {
+      const endIdx = idx + 1 < chatStarts.length ? chatStarts[idx + 1].startIdx - chatStarts[idx + 1].title.length - 5 : chatsBlock.length;
+      const body = chatsBlock.slice(ch.startIdx, endIdx).trim();
+      const idMatch = body.match(/<!-- chat-id: (.+?) -->/);
+      const tsMatch = body.match(/<!-- timestamp: (.+?) -->/);
+      const content = body.replace(/<!--.*?-->/g, "").trim();
+      if(content && content !== "_No chats yet._"){
+        const messages = [];
+        const msgRegex = /\*\*(You|AI|Error):\*\* ([\s\S]*?)(?=\n\*\*(You|AI|Error):\*\* |\n*$)/g;
+        let mm;
+        while((mm = msgRegex.exec(content)) !== null){
+          const role = mm[1] === "You" ? "user" : mm[1] === "AI" ? "assistant" : "error";
+          messages.push({ role, text: mm[2].trim(), ts: Date.now() });
+        }
+        result.chats.push({
+          id: idMatch ? idMatch[1] : uid("chat"),
+          title: ch.title,
+          ts: tsMatch ? Number(tsMatch[1]) : Date.now(),
+          messages
+        });
+      }
+    });
+  }
+
+  return result;
+}
+
+function mergeImportIntoState(imported, statusLog){
+  let added = { items: 0, stakeholders: 0, transcripts: 0, chats: 0, tsNodes: 0, tsEdges: 0 };
+  let skipped = { items: 0, stakeholders: 0, transcripts: 0, chats: 0 };
+
+  // Merge notes items — match by name (case-insensitive) + parentId structure
+  const existingNames = new Set((state.items || []).map(it => (it.name || "").toLowerCase().trim()));
+  (imported.items || []).forEach(it => {
+    const key = (it.name || "").toLowerCase().trim();
+    if(existingNames.has(key)){
+      // If existing item has no content but imported does, merge the content in
+      const existing = state.items.find(e => (e.name || "").toLowerCase().trim() === key);
+      if(existing && (!existing.desc || !existing.desc.trim()) && it.desc && it.desc.trim()){
+        existing.desc = it.desc;
+        added.items++;
+      } else {
+        skipped.items++;
+      }
+    } else {
+      // Remap parentId: if the parent was from the import, keep it; otherwise null
+      const parentExists = it.parentId && (state.items.some(e => e.id === it.parentId) || imported.items.some(e => e.id === it.parentId));
+      state.items.push({
+        id: it.id,
+        name: it.name,
+        parentId: parentExists ? it.parentId : null,
+        desc: it.desc || "",
+        ts: it.ts || Date.now()
+      });
+      existingNames.add(key);
+      added.items++;
+    }
+  });
+
+  // Merge stakeholders — match by name (case-insensitive)
+  const existingStakeholders = new Set((state.stakeholders || []).map(p => (p.name || "").toLowerCase().trim()));
+  (imported.stakeholders || []).forEach(p => {
+    const key = (p.name || "").toLowerCase().trim();
+    if(!key || existingStakeholders.has(key)){
+      skipped.stakeholders++;
+    } else {
+      state.stakeholders.push({ name: p.name, title: p.title || "", team: p.team || "", responsibilities: p.responsibilities || [] });
+      existingStakeholders.add(key);
+      added.stakeholders++;
+    }
+  });
+
+  // Merge team structure — add nodes/edges that don't already exist
+  const existingNodeIds = new Set((state.teamStructure.nodes || []).map(n => n.id));
+  (imported.teamStructure.nodes || []).forEach(n => {
+    if(!existingNodeIds.has(n.id)){
+      state.teamStructure.nodes.push(n);
+      existingNodeIds.add(n.id);
+      added.tsNodes++;
+    }
+  });
+  const existingEdgeKeys = new Set((state.teamStructure.edges || []).map(e => e.from + "->" + e.to));
+  (imported.teamStructure.edges || []).forEach(e => {
+    const key = e.from + "->" + e.to;
+    if(!existingEdgeKeys.has(key)){
+      state.teamStructure.edges.push(e);
+      existingEdgeKeys.add(key);
+      added.tsEdges++;
+    }
+  });
+
+  // Merge transcripts — match by filename + first 200 chars of text
+  const existingTranscripts = new Set((state.transcripts || []).map(t => (t.filename || "").toLowerCase() + "|" + (t.text || "").slice(0, 200).toLowerCase()));
+  (imported.transcripts || []).forEach(t => {
+    const key = (t.filename || "").toLowerCase() + "|" + (t.text || "").slice(0, 200).toLowerCase();
+    if(existingTranscripts.has(key)){
+      skipped.transcripts++;
+    } else {
+      state.transcripts.push({ id: t.id || uid("t"), filename: t.filename, text: t.text, ts: t.ts || Date.now() });
+      existingTranscripts.add(key);
+      added.transcripts++;
+    }
+  });
+
+  // Merge chats — match by title + message count
+  const existingChats = new Set((state.chats || []).map(c => (c.title || "").toLowerCase() + "|" + (c.messages || []).length));
+  (imported.chats || []).forEach(c => {
+    const key = (c.title || "").toLowerCase() + "|" + (c.messages || []).length;
+    if(existingChats.has(key)){
+      skipped.chats++;
+    } else {
+      state.chats.push({ id: c.id || uid("chat"), title: c.title, ts: c.ts || Date.now(), messages: c.messages || [] });
+      existingChats.add(key);
+      added.chats++;
+    }
+  });
+
+  return { added, skipped };
+}
+
+function renderImportExport(body){
+  body.innerHTML = `
+    <h2>Import / Export</h2>
+    <p class="small text-secondary mb-3">Share your entire project with another consultant, or bring in their work. Everything exports as a single readable <code>.md</code> file.</p>
+
+    <div class="ie-card">
+      <div class="ie-card-header">
+        <i class="bi bi-box-arrow-up"></i> Export
+      </div>
+      <div class="ie-card-body">
+        <p>Download <strong>${escapeHtml(state.name || "this project")}</strong> as a Markdown file containing all notes, stakeholders, team structure, transcripts, and chats.</p>
+        <button class="btn btn-primary" id="exportBtn"><i class="bi bi-download"></i> Export project (.md)</button>
+      </div>
+    </div>
+
+    <div class="ie-card mt-3">
+      <div class="ie-card-header">
+        <i class="bi bi-box-arrow-in-down"></i> Import
+      </div>
+      <div class="ie-card-body">
+        <p>Import a <code>.md</code> file exported from another Discovery Assistant. New content will be merged in — anything that already exists won't be duplicated.</p>
+        <div class="ie-import-row">
+          <input type="file" accept=".md,.markdown,.txt" id="importFileInput" class="form-control form-control-sm" style="max-width:320px">
+          <button class="btn btn-outline-primary btn-sm" id="importBtn" disabled><i class="bi bi-upload"></i> Import</button>
+        </div>
+        <div id="importStatus" class="ie-status" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="ie-card mt-3">
+      <div class="ie-card-header">
+        <i class="bi bi-info-circle"></i> What gets exported
+      </div>
+      <div class="ie-card-body ie-summary" id="ieSummary"></div>
+    </div>
+  `;
+
+  // Summary of current project data
+  const summary = document.getElementById("ieSummary");
+  const itemCount = (state.items || []).length;
+  const notedCount = (state.items || []).filter(it => it.desc && it.desc.trim()).length;
+  const shCount = (state.stakeholders || []).length;
+  const tsNodeCount = (state.teamStructure.nodes || []).length;
+  const trCount = (state.transcripts || []).length;
+  const chatCount = (state.chats || []).length;
+  summary.innerHTML = `
+    <div class="ie-stat"><span class="ie-stat-num">${itemCount}</span> note items (${notedCount} with content)</div>
+    <div class="ie-stat"><span class="ie-stat-num">${shCount}</span> stakeholders</div>
+    <div class="ie-stat"><span class="ie-stat-num">${tsNodeCount}</span> team structure nodes</div>
+    <div class="ie-stat"><span class="ie-stat-num">${trCount}</span> transcripts</div>
+    <div class="ie-stat"><span class="ie-stat-num">${chatCount}</span> chat threads</div>`;
+
+  // Export
+  document.getElementById("exportBtn").onclick = () => {
+    const md = exportProjectToMarkdown();
+    const safeName = (state.name || "project").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 60);
+    downloadMarkdown(md, `${safeName}_discovery_export.md`);
+  };
+
+  // Import
+  const fileInput = document.getElementById("importFileInput");
+  const importBtn = document.getElementById("importBtn");
+  const statusEl = document.getElementById("importStatus");
+  let selectedFile = null;
+
+  fileInput.onchange = () => {
+    selectedFile = fileInput.files[0] || null;
+    importBtn.disabled = !selectedFile;
+  };
+
+  importBtn.onclick = async () => {
+    if(!selectedFile) return;
+    importBtn.disabled = true;
+    importBtn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Importing...`;
+    statusEl.style.display = "";
+    statusEl.className = "ie-status";
+    statusEl.textContent = "Reading file...";
+
+    try {
+      const text = await selectedFile.text();
+      if(!text.includes("D365-DISCOVERY-EXPORT") && !text.match(/^## (Notes|Stakeholders|Transcripts)/m)){
+        statusEl.className = "ie-status ie-status-warn";
+        statusEl.textContent = "This doesn't look like a Discovery Assistant export file. Import anyway?";
+        importBtn.textContent = "Import anyway";
+        importBtn.disabled = false;
+        importBtn.onclick = async () => { await doImport(text); };
+        return;
+      }
+      await doImport(text);
+    } catch(err) {
+      statusEl.className = "ie-status ie-status-error";
+      statusEl.textContent = "Couldn't read that file: " + err.message;
+      importBtn.disabled = false;
+      importBtn.innerHTML = `<i class="bi bi-upload"></i> Import`;
+    }
+  };
+
+  async function doImport(text){
+    try {
+      statusEl.textContent = "Parsing...";
+      const imported = parseImportMarkdown(text);
+      const { added, skipped } = mergeImportIntoState(imported);
+      await persist();
+
+      const parts = [];
+      if(added.items) parts.push(`${added.items} note(s)`);
+      if(added.stakeholders) parts.push(`${added.stakeholders} stakeholder(s)`);
+      if(added.tsNodes) parts.push(`${added.tsNodes} team structure node(s)`);
+      if(added.transcripts) parts.push(`${added.transcripts} transcript(s)`);
+      if(added.chats) parts.push(`${added.chats} chat(s)`);
+      const skipParts = [];
+      if(skipped.items) skipParts.push(`${skipped.items} note(s)`);
+      if(skipped.stakeholders) skipParts.push(`${skipped.stakeholders} stakeholder(s)`);
+      if(skipped.transcripts) skipParts.push(`${skipped.transcripts} transcript(s)`);
+      if(skipped.chats) skipParts.push(`${skipped.chats} chat(s)`);
+
+      statusEl.className = "ie-status ie-status-success";
+      let msg = parts.length ? `Imported: ${parts.join(", ")}.` : "Nothing new to import — everything in that file already exists here.";
+      if(skipParts.length) msg += ` Skipped (already existed): ${skipParts.join(", ")}.`;
+      statusEl.textContent = msg;
+
+      // Refresh the summary counts
+      rerenderKeepScroll();
+    } catch(err) {
+      statusEl.className = "ie-status ie-status-error";
+      statusEl.textContent = "Import failed: " + err.message;
+    }
+    importBtn.disabled = false;
+    importBtn.innerHTML = `<i class="bi bi-upload"></i> Import`;
+    selectedFile = null;
+    fileInput.value = "";
+  }
 }
 
 /* ---------------- Chat (ChatGPT-style, Gemini-backed, this project's notes only) ---------------- */

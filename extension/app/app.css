@@ -294,3 +294,17 @@ details[open] summary:before{content:"▾ "}
 .split-ctx-item{padding:8px 12px;font-size:13px;border-radius:5px;cursor:pointer;display:flex;align-items:center;gap:8px}
 .split-ctx-item:hover{background:#f0f4f8}
 .split-ctx-item i{font-size:14px;width:16px;text-align:center;color:var(--blue)}
+
+/* Import / Export page */
+.ie-card{background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.ie-card-header{display:flex;align-items:center;gap:8px;padding:10px 16px;font-size:13.5px;font-weight:700;background:#f8f9fb;border-bottom:1px solid var(--border);color:var(--navy)}
+.ie-card-body{padding:14px 16px;font-size:13.5px;line-height:1.6}
+.ie-card-body p{margin:0 0 10px}
+.ie-import-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ie-status{margin-top:10px;font-size:12.5px;padding:8px 12px;border-radius:6px;background:#f4f5f7;color:var(--muted)}
+.ie-status-success{background:#e7f7f2;color:#137a56}
+.ie-status-warn{background:var(--warning-bg);color:var(--warning-text)}
+.ie-status-error{background:#fde2e1;color:var(--danger)}
+.ie-summary{display:flex;flex-wrap:wrap;gap:12px 24px}
+.ie-stat{font-size:13px;color:#555}
+.ie-stat-num{font-weight:700;color:var(--navy);margin-right:3px}
