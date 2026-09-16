@@ -33,22 +33,15 @@ let sidebarCollapsed = true;
 let expandedTreeItems = new Set(); // item ids currently expanded in the Notes rail
 let noteFlushFn = null; // flushes the currently-mounted Notes editor's unsaved text; set by renderNotes, called by renderSection before it tears the page down
 
-/* ---------------- Split-view workspace ----------------
-   A browser extension can't spawn real separate OS windows the way Windows'
-   own snap layouts do — this simulates the same drag-to-edge gesture inside
-   the extension's own content area instead. It's only offered when this
-   page is running as a full tab (isFullTabMode, resolved in init() the same
-   way the existing maximize button detects that), never in the cramped
-   default side panel. Each pane is a separate <iframe> pointed at this same
-   index.html with ?pane=<navKey>&embed=1, which gives every pane a fully
-   independent, fully interactive app instance (its own JS globals, its own
-   DOM) with zero changes to any existing render function — far simpler and
-   safer than threading per-pane state through the whole single-page app.
-   Panes stay in sync with each other via chrome.storage.onChanged. */
+/* ---------------- Split-view (same-page, no iframes) ----------------
+   In full-tab mode, drag a nav item to the right half of the content area
+   (or right-click → "Open in split view") to render two pages side by side
+   in the same DOM/JS context. Instant, no sync lag, no iframes.
+   Only offered in full-tab mode — side panel is too narrow. */
 let isFullTabMode = false;
 let isEmbeddedPane = false;
-const WORKSPACE_SLOTS = ["tl","tr","bl","br"];
-let workspaceSlots = { tl:null, tr:null, bl:null, br:null }; // navKey or null per quadrant
+let splitNavKey = null; // navKey of the secondary pane, or null = no split
+let splitRatio = 0.5;  // 0..1, fraction of width for primary pane
 let dragNavKey = null;
 
 // Re-renders the current section without losing your scroll position or
@@ -691,10 +684,6 @@ function renderTeamStructure(body){
 
 /* ---------------- init / project switching ---------------- */
 async function init(){
-  const params = new URLSearchParams(location.search);
-  isEmbeddedPane = params.get("embed") === "1";
-  if(isEmbeddedPane) document.body.classList.add("embed-pane");
-
   allProjects = await loadAllProjects();
   geminiApiKey = await loadApiKey();
   if(Object.keys(allProjects).length === 0){
@@ -706,20 +695,15 @@ async function init(){
     currentId = Object.keys(allProjects)[0];
   }
   loadCurrentState();
-  if(params.get("pane") && NAV.some(s => s.key === params.get("pane"))){
-    activeNav = params.get("pane");
-  }
   renderProjectSwitcher();
   renderNav();
   document.getElementById("appSidebar").classList.toggle("collapsed", sidebarCollapsed);
   renderSection();
   await setupMaximizeButton(); // also resolves isFullTabMode, used below
 
-  if(isFullTabMode && !isEmbeddedPane) setupWorkspaceDragDrop();
+  if(isFullTabMode) setupWorkspaceDragDrop();
 
-  // Keep every open pane (this window plus any split-view iframes) in sync:
-  // when one pane edits project data, the others pick it up without a
-  // manual reload.
+  // Keep data in sync when changed from another context (e.g. side panel)
   if(chrome.storage && chrome.storage.onChanged){
     chrome.storage.onChanged.addListener((changes, area) => {
       if(area !== "local" || !changes[STORAGE_KEY]) return;
@@ -728,6 +712,7 @@ async function init(){
       loadCurrentState();
       renderProjectSwitcher();
       renderSection();
+      if(splitNavKey) renderSplitSecondary();
     });
   }
 
@@ -775,17 +760,12 @@ async function setupMaximizeButton(){
   }catch(e){ /* not running inside an extension tab context; leave hidden */ }
 }
 
-/* ---------------- Split-view workspace: drag-to-snap panes ---------------- */
+/* ---------------- Split-view: drag-to-split + context menu ---------------- */
 function paneLabel(navKey){ const s = NAV.find(n => n.key === navKey); return s ? s.name : navKey; }
 function paneIcon(navKey){ const s = NAV.find(n => n.key === navKey); return s ? s.icon : "bi-file-earmark"; }
-function paneIframeSrc(navKey){ return `${location.pathname}?pane=${encodeURIComponent(navKey)}&embed=1`; }
 
-// Nav items become draggable only in full-tab, non-embedded mode, so the
-// side panel and any already-split-out pane never show this affordance.
-// renderNav() rebuilds #navList from scratch on every call (project switch,
-// refresh click, page change), which wipes any listeners attached to the
-// old nodes — so this needs to be re-run every time renderNav() runs, not
-// just once at startup.
+// Nav items become draggable in full-tab mode. renderNav() rebuilds the
+// list each time, so this must re-run after every renderNav() call.
 function wireNavItemDragHandles(){
   if(!isFullTabMode || isEmbeddedPane) return;
   const hint = document.getElementById("snapZoneHint");
@@ -797,7 +777,143 @@ function wireNavItemDragHandles(){
       e.dataTransfer.effectAllowed = "copy";
       e.dataTransfer.setData("text/plain", dragNavKey);
     });
-    link.addEventListener("dragend", () => { dragNavKey = null; if(hint) hint.style.display = "none"; });
+    link.addEventListener("dragend", () => {
+      dragNavKey = null;
+      if(hint) hint.style.display = "none";
+    });
+    // Right-click: "Open in split view"
+    link.addEventListener("contextmenu", (e) => {
+      if(!isFullTabMode) return;
+      e.preventDefault();
+      showSplitContextMenu(e.clientX, e.clientY, link.dataset.key);
+    });
+  });
+}
+
+function showSplitContextMenu(x, y, navKey){
+  closeSplitContextMenu();
+  const menu = document.createElement("div");
+  menu.className = "split-ctx-menu";
+  menu.id = "splitCtxMenu";
+  const isSplit = splitNavKey === navKey;
+  menu.innerHTML = `
+    <div class="split-ctx-item" data-action="split">
+      <i class="bi bi-layout-split"></i> ${isSplit ? "Already in split" : "Open in split view"}
+    </div>
+    ${splitNavKey ? `<div class="split-ctx-item" data-action="close"><i class="bi bi-x-circle"></i> Close split view</div>` : ""}`;
+  menu.style.left = x + "px";
+  menu.style.top = y + "px";
+  document.body.appendChild(menu);
+  // Adjust if it goes off-screen
+  const rect = menu.getBoundingClientRect();
+  if(rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 8) + "px";
+  if(rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + "px";
+
+  menu.querySelectorAll(".split-ctx-item").forEach(item => {
+    item.onclick = () => {
+      closeSplitContextMenu();
+      if(item.dataset.action === "split" && !isSplit) openSplitView(navKey);
+      else if(item.dataset.action === "close") closeSplitView();
+    };
+  });
+  setTimeout(() => {
+    document.addEventListener("click", closeSplitContextMenu, { once: true });
+    document.addEventListener("contextmenu", closeSplitContextMenu, { once: true });
+  }, 0);
+}
+function closeSplitContextMenu(){
+  const old = document.getElementById("splitCtxMenu");
+  if(old) old.remove();
+}
+
+function openSplitView(navKey){
+  if(navKey === activeNav){
+    // Don't split the same page into both sides — swap instead
+    splitNavKey = null;
+    renderSplitLayout();
+    return;
+  }
+  splitNavKey = navKey;
+  splitRatio = 0.5;
+  renderSplitLayout();
+}
+function closeSplitView(){
+  splitNavKey = null;
+  renderSplitLayout();
+}
+
+// Renders the secondary pane content using the existing render functions
+function renderSplitSecondary(){
+  const body = document.getElementById("splitSecondaryBody");
+  if(!body || !splitNavKey) return;
+  body.innerHTML = "";
+  if(splitNavKey === "notes") renderNotes(body);
+  else if(splitNavKey === "chat") renderChat(body);
+  else if(splitNavKey === "stakeholders") renderStakeholders(body);
+  else if(splitNavKey === "teamstructure") renderTeamStructure(body);
+  else if(splitNavKey === "transcripts") renderTranscripts(body);
+  else if(splitNavKey === "apikey") renderApiKeyPage(body);
+}
+
+function renderSplitLayout(){
+  const divider = document.getElementById("splitDivider");
+  const secondary = document.getElementById("splitSecondary");
+  const primary = document.getElementById("splitPrimary");
+  const container = document.getElementById("splitContainer");
+
+  if(!splitNavKey){
+    divider.style.display = "none";
+    secondary.style.display = "none";
+    primary.style.flex = "1";
+    primary.style.width = "";
+    return;
+  }
+
+  // Show split
+  const containerW = container.getBoundingClientRect().width;
+  const primaryW = Math.round(containerW * splitRatio);
+  primary.style.flex = "none";
+  primary.style.width = primaryW + "px";
+  divider.style.display = "";
+  secondary.style.display = "flex";
+  secondary.style.flex = "1";
+
+  // Update header
+  document.getElementById("splitSecondaryIcon").className = "bi " + paneIcon(splitNavKey);
+  document.getElementById("splitSecondaryTitle").textContent = paneLabel(splitNavKey);
+  document.getElementById("splitSecondaryClose").onclick = closeSplitView;
+
+  renderSplitSecondary();
+}
+
+function setupSplitDividerDrag(){
+  const divider = document.getElementById("splitDivider");
+  const container = document.getElementById("splitContainer");
+  const primary = document.getElementById("splitPrimary");
+  let dragging = false;
+
+  divider.addEventListener("mousedown", (e) => {
+    if(e.button !== 0) return;
+    e.preventDefault();
+    dragging = true;
+    divider.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  });
+  document.addEventListener("mousemove", (e) => {
+    if(!dragging) return;
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const ratio = Math.max(0.2, Math.min(0.8, x / rect.width));
+    splitRatio = ratio;
+    primary.style.width = Math.round(rect.width * ratio) + "px";
+  });
+  document.addEventListener("mouseup", () => {
+    if(!dragging) return;
+    dragging = false;
+    divider.classList.remove("dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
   });
 }
 
@@ -805,103 +921,28 @@ function setupWorkspaceDragDrop(){
   const appMain = document.getElementById("appMain");
   const hint = document.getElementById("snapZoneHint");
   wireNavItemDragHandles();
-
-  function quadrantFromEvent(e){
-    const rect = appMain.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    return (x < 0.5 ? "l" : "r") + (y < 0.5 ? "t" : "b");
-  }
-  const quadrantKey = { lt:"tl", rt:"tr", lb:"bl", rb:"br" };
+  setupSplitDividerDrag();
 
   appMain.addEventListener("dragover", (e) => {
     if(!dragNavKey) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
-    const q = quadrantKey[quadrantFromEvent(e)];
-    const rect = appMain.getBoundingClientRect();
-    const halves = { tl:[0,0,50,50], tr:[50,0,50,50], bl:[0,50,50,50], br:[50,50,50,50] };
-    const [left, top, w, h] = halves[q];
+    // Show hint on the right half only (where drop will open split)
     hint.style.display = "block";
-    hint.style.left = left + "%";
-    hint.style.top = top + "%";
-    hint.style.width = w + "%";
-    hint.style.height = h + "%";
+    hint.style.left = "50%";
+    hint.style.top = "0";
+    hint.style.width = "50%";
+    hint.style.height = "100%";
   });
   appMain.addEventListener("dragleave", (e) => {
-    if(e.target === appMain) hint.style.display = "none";
+    if(!appMain.contains(e.relatedTarget)) hint.style.display = "none";
   });
   appMain.addEventListener("drop", (e) => {
     e.preventDefault();
     hint.style.display = "none";
     if(!dragNavKey) return;
-    const q = quadrantKey[quadrantFromEvent(e)];
-    workspaceSlots[q] = dragNavKey;
+    openSplitView(dragNavKey);
     dragNavKey = null;
-    renderWorkspace();
-  });
-}
-
-// Renders up to 4 panes as a CSS grid. When only 2 adjacent slots are
-// filled (both top, both bottom, both left, or both right) it collapses to
-// a clean 50/50 half-screen split instead of a 2x2 grid with two dead
-// quadrants — matching "snap to half the screen" for the 2-pane case, and
-// only actually going full 2x2 once a 3rd or 4th (or diagonal) pane is added.
-function computeWorkspaceLayout(){
-  const filled = WORKSPACE_SLOTS.filter(k => workspaceSlots[k]);
-  if(filled.length === 0) return null;
-  const has = k => !!workspaceSlots[k];
-  if(filled.length <= 2 && has("tl") && has("tr") && !has("bl") && !has("br")){
-    return { columns: "1fr 1fr", rows: "1fr", areas: [["tl","tr"]] };
-  }
-  if(filled.length <= 2 && has("bl") && has("br") && !has("tl") && !has("tr")){
-    return { columns: "1fr 1fr", rows: "1fr", areas: [["bl","br"]] };
-  }
-  if(filled.length <= 2 && has("tl") && has("bl") && !has("tr") && !has("br")){
-    return { columns: "1fr", rows: "1fr 1fr", areas: [["tl"],["bl"]] };
-  }
-  if(filled.length <= 2 && has("tr") && has("br") && !has("tl") && !has("bl")){
-    return { columns: "1fr", rows: "1fr 1fr", areas: [["tr"],["br"]] };
-  }
-  if(filled.length === 1){
-    const only = filled[0];
-    return { columns: "1fr", rows: "1fr", areas: [[only]] };
-  }
-  return { columns: "1fr 1fr", rows: "1fr 1fr", areas: [["tl","tr"],["bl","br"]] };
-}
-
-function renderWorkspace(){
-  const overlay = document.getElementById("workspaceOverlay");
-  const sectionBody = document.getElementById("sectionBody");
-  const layout = computeWorkspaceLayout();
-  if(!layout){
-    overlay.style.display = "none";
-    overlay.innerHTML = "";
-    sectionBody.style.display = "";
-    renderSection(); // refresh the single-page view — it may be stale after sitting hidden
-    return;
-  }
-  sectionBody.style.display = "none";
-  overlay.style.display = "grid";
-  overlay.style.gridTemplateColumns = layout.columns;
-  overlay.style.gridTemplateRows = layout.rows;
-  overlay.style.gridTemplateAreas = layout.areas.map(row => `"${row.join(" ")}"`).join(" ");
-
-  overlay.innerHTML = WORKSPACE_SLOTS.filter(k => workspaceSlots[k]).map(k => `
-    <div class="workspace-pane" style="grid-area:${k}">
-      <div class="workspace-pane-header">
-        <i class="bi ${paneIcon(workspaceSlots[k])}"></i>
-        <span>${escapeHtml(paneLabel(workspaceSlots[k]))}</span>
-        <button class="workspace-pane-close" data-slot="${k}" title="Close pane"><i class="bi bi-x-lg"></i></button>
-      </div>
-      <iframe src="${paneIframeSrc(workspaceSlots[k])}"></iframe>
-    </div>`).join("");
-
-  overlay.querySelectorAll(".workspace-pane-close").forEach(btn => {
-    btn.onclick = () => {
-      workspaceSlots[btn.dataset.slot] = null;
-      renderWorkspace();
-    };
   });
 }
 
@@ -980,6 +1021,7 @@ async function switchToProject(id){
   renderProjectSwitcher();
   renderNav();
   renderSection();
+  if(splitNavKey) renderSplitSecondary();
 }
 
 function renderProjectSwitcher(){
@@ -1018,7 +1060,13 @@ function renderProjectSwitcher(){
   });
 }
 
-function goNav(key){ activeNav = key; renderNav(); renderSection(); }
+function goNav(key){
+  activeNav = key;
+  renderNav();
+  renderSection();
+  // Re-apply split layout in case it was active (renderSection may have closed it if same page)
+  if(splitNavKey) renderSplitLayout();
+}
 function renderNav(){
   const el = document.getElementById("navList");
   const navLinkHtml = (s) => `<div class="nav-link ${s.key===activeNav?"active":""}" data-key="${s.key}"><i class="bi ${s.icon} nav-icon"></i><span class="nav-label">${s.name}</span></div>`;
@@ -1071,6 +1119,8 @@ function renderSection(){
   else if(activeNav === "teamstructure") renderTeamStructure(body);
   else if(activeNav === "transcripts") renderTranscripts(body);
   else if(activeNav === "apikey") renderApiKeyPage(body);
+  // If the user navigated to the same page that's in the split pane, close split
+  if(splitNavKey && splitNavKey === activeNav) closeSplitView();
 }
 
 function timeAgoLabel(ts){

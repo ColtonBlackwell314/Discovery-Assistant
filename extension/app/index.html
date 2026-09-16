@@ -39,8 +39,22 @@
       <div id="navList"></div>
     </div>
     <div class="app-main" id="appMain">
-      <div id="sectionBody"></div>
-      <div id="workspaceOverlay" class="workspace-overlay" style="display:none"></div>
+      <div class="split-container" id="splitContainer">
+        <div class="split-pane split-pane-primary" id="splitPrimary">
+          <div id="sectionBody"></div>
+        </div>
+        <div class="split-divider" id="splitDivider" style="display:none" title="Drag to resize">
+          <div class="split-divider-grip"></div>
+        </div>
+        <div class="split-pane split-pane-secondary" id="splitSecondary" style="display:none">
+          <div class="split-pane-header" id="splitSecondaryHeader">
+            <i class="bi" id="splitSecondaryIcon"></i>
+            <span id="splitSecondaryTitle"></span>
+            <button class="split-pane-close" id="splitSecondaryClose" title="Close split pane"><i class="bi bi-x-lg"></i></button>
+          </div>
+          <div class="split-pane-body" id="splitSecondaryBody"></div>
+        </div>
+      </div>
       <div id="snapZoneHint" class="snap-zone-hint" style="display:none"></div>
     </div>
   </div>

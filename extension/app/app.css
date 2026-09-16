@@ -25,10 +25,12 @@ body{background:#f4f5f7;color:#1c1e21;font-size:14px}
    column with dead space on either side. */
 @media (min-width:1100px){
   .app-main{padding:28px 48px}
+  .split-pane-secondary .split-pane-body{padding:24px 28px}
   .stakeholder-card-row{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
 }
 @media (min-width:1500px){
   .app-main{padding:32px 72px}
+  .split-pane-secondary .split-pane-body{padding:28px 36px}
 }
 
 /* title bar */
@@ -258,25 +260,37 @@ details[open] summary:before{content:"▾ "}
 .chat-empty{margin:auto;text-align:center;color:var(--muted);font-size:13px;padding:20px}
 @media (max-width:700px){ .chat-shell{flex-direction:column;height:auto} .chat-threads{width:100%;max-height:140px} }
 
-/* Embedded split-view pane: this same index.html loaded inside a workspace
-   iframe (?embed=1) shows only its page content — no titlebar, no primary
-   nav sidebar, since the parent workspace already provides its own compact
-   header with a close button per pane. */
-.embed-pane .project-titlebar, .embed-pane .app-sidebar{display:none}
-.embed-pane .app-main{padding:14px 16px}
+/* Split-view: drag a nav item to the right half of the content area (or
+   right-click → Open in split) to get two pages side by side. Same DOM,
+   same JS context, instant — no iframes, no sync lag. Only available in
+   full-tab mode (see isFullTabMode in app.js). */
+.split-container{display:flex;height:100%;min-height:0}
+.split-pane{overflow-y:auto;min-width:0;min-height:0}
+.split-pane-primary{flex:1}
+.split-pane-secondary{display:flex;flex-direction:column;overflow:hidden}
+.split-pane-secondary .split-pane-body{flex:1;overflow-y:auto;padding:20px 24px}
 
-/* Split-view workspace: drag a nav item to an edge/corner of the content
-   area to snap it into up to 4 resizable-by-count panes, each a fully
-   independent, fully interactive embedded instance of the app. Only wired
-   up in full-tab mode (see isFullTabMode in app.js) — never in the side
-   panel, where there isn't room for this to make sense. */
+/* Divider / resize handle */
+.split-divider{width:6px;flex-shrink:0;cursor:col-resize;background:#e3e5e8;position:relative;z-index:5;transition:background .15s}
+.split-divider:hover,.split-divider.dragging{background:var(--blue)}
+.split-divider-grip{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:4px;height:32px;border-radius:2px;background:#b0b5bc;transition:background .15s}
+.split-divider:hover .split-divider-grip,.split-divider.dragging .split-divider-grip{background:#fff}
+
+/* Secondary pane header (compact, dark) */
+.split-pane-header{display:flex;align-items:center;gap:7px;padding:7px 12px;background:var(--navy);color:#fff;font-size:12.5px;font-weight:600;flex-shrink:0}
+.split-pane-header span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.split-pane-close{background:transparent;border:none;color:#fff;opacity:.7;font-size:12px;cursor:pointer;padding:2px 5px;line-height:1;border-radius:4px}
+.split-pane-close:hover{opacity:1;background:rgba(255,255,255,.15)}
+
+/* Nav items are draggable in full-tab mode */
 .nav-link-draggable{cursor:grab}
 .nav-link-draggable:active{cursor:grabbing}
-.snap-zone-hint{position:absolute;background:rgba(15,108,189,.22);border:2px dashed var(--blue);border-radius:8px;pointer-events:none;z-index:50;transition:left .08s ease,top .08s ease,width .08s ease,height .08s ease}
-.workspace-overlay{position:absolute;inset:0;background:#e9ecf0;gap:3px;z-index:10}
-.workspace-pane{background:#fff;display:flex;flex-direction:column;min-width:0;min-height:0;border:1px solid var(--border)}
-.workspace-pane-header{display:flex;align-items:center;gap:7px;padding:6px 10px;background:var(--navy);color:#fff;font-size:12px;font-weight:600;flex-shrink:0}
-.workspace-pane-header span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.workspace-pane-close{background:transparent;border:none;color:#fff;opacity:.7;font-size:11px;cursor:pointer;padding:2px 4px;line-height:1}
-.workspace-pane-close:hover{opacity:1}
-.workspace-pane iframe{flex:1;border:none;width:100%;height:100%}
+
+/* Drop zone hint when dragging a nav item over the content area */
+.snap-zone-hint{position:absolute;background:rgba(15,108,189,.18);border:2px dashed var(--blue);border-radius:8px;pointer-events:none;z-index:50;transition:opacity .12s}
+
+/* Right-click context menu for "Open in split view" */
+.split-ctx-menu{position:fixed;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.15);padding:4px;z-index:2000;min-width:180px}
+.split-ctx-item{padding:8px 12px;font-size:13px;border-radius:5px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.split-ctx-item:hover{background:#f0f4f8}
+.split-ctx-item i{font-size:14px;width:16px;text-align:center;color:var(--blue)}
