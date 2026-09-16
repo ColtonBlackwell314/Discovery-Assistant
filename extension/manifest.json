@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "D365 Discovery Hub",
+  "version": "3.0.0",
+  "description": "Discovery workshop assistant for D365 CRM consultants: dynamic notes sections organized like folders, an overview dashboard, and an AI chat that answers questions using that project's discovery notes only (Gemini API, opt-in). Opens as a resizable side panel, with a one-click option to expand into its own full tab.",
+  "action": {
+    "default_title": "Open D365 Discovery Hub"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "app/index.html"
+  },
+  "permissions": ["storage", "tabs", "sidePanel", "contextMenus"],
+  "host_permissions": ["https://generativelanguage.googleapis.com/*"],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

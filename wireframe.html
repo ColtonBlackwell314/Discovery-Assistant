@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D365 Discovery Hub — wireframe reference</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+:root{color-scheme:light}
+body{background:#f4f5f7;color:#1c1e21;padding:24px}
+.screen-label{font-size:.75rem;color:#6b7280;margin:2rem 0 .5rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+.sidebar{background:#1c2b3a;color:#e6ebf1;font-size:.85rem}
+.sidebar .nav-link{color:#c7d2dc}
+.sidebar .nav-link.active{background:#0f6cbd;color:#fff}
+.ai-badge{background:#534ab7;color:#fff;font-size:.65rem;font-weight:600;padding:.1rem .4rem;border-radius:.5rem}
+.ai-btn{background:#eeedfe;color:#3c3489;border:1px solid #cecbf6}
+.tag-pill{background:#e6f1fb;color:#185fa5;font-size:.7rem;padding:.15rem .5rem;border-radius:.7rem}
+.section-tab .btn-close{font-size:.55rem;margin-left:.4rem;vertical-align:middle}
+.docx-drop{border:1px dashed #b5d4f4;background:#f4f9fe;border-radius:.5rem;color:#185fa5}
+</style>
+</head>
+<body>
+<h1 class="h5">D365 discovery hub — wireframe reference</h1>
+<p class="text-secondary small mb-4">Low-fidelity, non-interactive reference for the app in outputs/d365-discovery-assistant.html. Built with Bootstrap 5 so the wireframe matches the real app's styling.</p>
+
+<div class="screen-label">1. Global shell — navbar, project switcher, search</div>
+<nav class="navbar navbar-expand-md navbar-dark bg-dark px-3 rounded">
+  <span class="navbar-brand mb-0 h6">D365 Discovery Hub</span>
+  <div class="d-flex flex-grow-1 flex-wrap align-items-center gap-2 ms-md-4">
+    <button class="btn btn-sm btn-outline-light dropdown-toggle" type="button">📁 Acme Corp</button>
+    <input type="text" class="form-control form-control-sm flex-grow-1" style="min-width:180px" placeholder="Search everything in this project...">
+    <button class="btn btn-sm btn-primary">Export CSV</button>
+  </div>
+</nav>
+<div class="card mt-2" style="max-width:280px">
+  <div class="card-body py-2">
+    <label class="form-label small fw-semibold mb-1">Current project name</label>
+    <input type="text" class="form-control form-control-sm mb-2" value="Acme Corp">
+    <div class="small text-secondary fw-semibold mb-1">Switch to a project</div>
+    <div class="d-flex justify-content-between small p-1 rounded bg-light"><span class="fw-semibold">Acme Corp</span><span class="text-secondary">12 reqs</span></div>
+    <div class="d-flex justify-content-between small p-1"><span>Contoso Ltd</span><span class="text-secondary">4 reqs</span></div>
+    <div class="d-flex justify-content-between small p-1"><span>Fabrikam Inc</span><span class="text-secondary">0 reqs</span></div>
+    <button class="btn btn-sm btn-primary w-100 mt-2">+ New project</button>
+  </div>
+</div>
+
+<div class="screen-label">2. Overview</div>
+<div class="row g-0 border rounded overflow-hidden">
+  <div class="col-md-2 sidebar p-2">
+    <ul class="nav flex-column">
+      <li class="nav-item"><a class="nav-link active px-2 py-2">⌂ Overview</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">✎ Discovery notes</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">☗ Team structure</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">⇄ Process flows</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">☑ Requirements log</a></li>
+    </ul>
+  </div>
+  <div class="col-md-10 p-3 bg-white">
+    <div class="row g-2 mb-3">
+      <div class="col-4"><div class="bg-light rounded p-2"><div class="fs-5 fw-semibold">18</div><div class="small text-secondary">Discovery notes captured</div></div></div>
+      <div class="col-4"><div class="bg-light rounded p-2"><div class="fs-5 fw-semibold">12</div><div class="small text-secondary">Requirements logged</div></div></div>
+      <div class="col-4"><div class="bg-light rounded p-2"><div class="fs-5 fw-semibold">5</div><div class="small text-secondary">Open decisions</div></div></div>
+    </div>
+    <div class="row g-2">
+      <div class="col-md-6"><div class="card"><div class="card-body small">Key stakeholders<br>Sarah Chen — Sales ops lead<br>Mike Torres — IT stakeholder</div></div></div>
+      <div class="col-md-6"><div class="card"><div class="card-body small">Process flows in progress<br>Lead to cash — 4 as-is / 2 to-be</div></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="screen-label">3. Discovery notes — dynamic sections, meeting history, transcript log (no static questions)</div>
+<div class="row g-0 border rounded overflow-hidden">
+  <div class="col-md-2 sidebar p-2">
+    <ul class="nav flex-column">
+      <li class="nav-item"><a class="nav-link px-2 py-2">⌂ Overview</a></li>
+      <li class="nav-item"><a class="nav-link active px-2 py-2">✎ Discovery notes</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">☗ Team structure</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">⇄ Process flows</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">☑ Requirements log</a></li>
+    </ul>
+  </div>
+  <div class="col-md-10 p-3 bg-white">
+
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      <span class="badge rounded-pill bg-primary section-tab px-3 py-2">Sales <span class="btn-close btn-close-white" aria-label="Remove"></span></span>
+      <span class="badge rounded-pill text-bg-light border section-tab px-3 py-2">Service <span class="btn-close" aria-label="Remove"></span></span>
+      <span class="badge rounded-pill text-bg-light border section-tab px-3 py-2">Marketing <span class="btn-close" aria-label="Remove"></span></span>
+      <button class="btn btn-sm btn-outline-secondary rounded-pill">+ Add section</button>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h3 class="h6 mb-0 text-uppercase text-secondary" style="font-size:.75rem;letter-spacing:.03em">Meeting history — Sales</h3>
+      <span class="text-secondary" style="font-size:.7rem">free text only, no fixed questions</span>
+    </div>
+
+    <div class="card mb-2 border-dashed" style="border-style:dashed">
+      <div class="card-body">
+        <label class="form-label small fw-semibold">Title</label>
+        <input type="text" class="form-control form-control-sm mb-2" placeholder="e.g. Workshop 3 — pipeline and quoting">
+        <label class="form-label small fw-semibold">Description</label>
+        <textarea class="form-control form-control-sm mb-2" rows="2" placeholder="Free text notes from the session go here..."></textarea>
+        <button class="btn btn-sm btn-primary">Save</button>
+      </div>
+    </div>
+
+    <div class="card mb-2">
+      <div class="card-body py-2">
+        <div class="d-flex justify-content-between">
+          <div class="fw-semibold small">Workshop 2 — lead routing</div>
+          <button class="btn btn-sm btn-link text-danger p-0">Remove</button>
+        </div>
+        <div class="small mt-1">Leads currently triaged manually by the ops team, no automatic assignment rules today. Client wants round-robin by territory.</div>
+        <div class="text-secondary mt-1" style="font-size:.7rem">Added 3 days ago</div>
+      </div>
+    </div>
+    <div class="card mb-3">
+      <div class="card-body py-2">
+        <div class="d-flex justify-content-between">
+          <div class="fw-semibold small">Workshop 1 — kickoff</div>
+          <button class="btn btn-sm btn-link text-danger p-0">Remove</button>
+        </div>
+        <div class="small mt-1">Introduced the sales ops team, walked through current CRM pain points at a high level.</div>
+        <div class="text-secondary mt-1" style="font-size:.7rem">Added 6 days ago</div>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h3 class="h6 mb-0 text-uppercase text-secondary" style="font-size:.75rem;letter-spacing:.03em">Meeting transcript log — Sales</h3>
+      <span class="text-secondary" style="font-size:.7rem">.docx uploads, parsed locally</span>
+    </div>
+    <div class="docx-drop p-2 mb-2 small">⬆ Upload .docx transcript</div>
+    <div class="d-flex justify-content-between align-items-center border rounded p-2 mb-2 small bg-white">
+      <span>📄 workshop-2-recording-transcript.docx</span>
+      <span class="text-secondary">Imported 3 days ago &middot; <a href="#" class="text-danger text-decoration-none">Remove</a></span>
+    </div>
+    <div class="d-flex justify-content-between align-items-center border rounded p-2 small bg-white">
+      <span>📄 sales-kickoff-notes.docx</span>
+      <span class="text-secondary">Imported 6 days ago &middot; <a href="#" class="text-danger text-decoration-none">Remove</a></span>
+    </div>
+  </div>
+</div>
+
+<div class="screen-label">4. Team structure — typed entries + AI-suggested from notes</div>
+<div class="row g-0 border rounded overflow-hidden">
+  <div class="col-md-2 sidebar p-2">
+    <ul class="nav flex-column">
+      <li class="nav-item"><a class="nav-link px-2 py-2">⌂ Overview</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">✎ Discovery notes</a></li>
+      <li class="nav-item"><a class="nav-link active px-2 py-2">☗ Team structure</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">⇄ Process flows</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">☑ Requirements log</a></li>
+    </ul>
+  </div>
+  <div class="col-md-10 p-3 bg-white">
+    <button class="btn btn-sm ai-btn mb-2"><span class="ai-badge">AI</span> Refresh team structure from discovery notes</button>
+    <div class="card mb-2"><div class="card-body py-2 small">Sarah Chen <span class="ai-badge">AI suggested</span><br>Mentioned 4x in notes &middot; Confirm / Dismiss</div></div>
+    <div class="card"><div class="card-body py-2 small">Mike Torres — IT stakeholder<br>Authority: sign-off on integrations <span class="tag-pill">integration</span></div></div>
+  </div>
+</div>
+
+<div class="screen-label">5. Process flows — as-is / to-be, AI-drafted steps</div>
+<div class="row g-0 border rounded overflow-hidden">
+  <div class="col-md-2 sidebar p-2">
+    <ul class="nav flex-column">
+      <li class="nav-item"><a class="nav-link px-2 py-2">⌂ Overview</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">✎ Discovery notes</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">☗ Team structure</a></li>
+      <li class="nav-item"><a class="nav-link active px-2 py-2">⇄ Process flows</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">☑ Requirements log</a></li>
+    </ul>
+  </div>
+  <div class="col-md-10 p-3 bg-white">
+    <div class="card">
+      <div class="card-body">
+        <div class="fw-semibold small mb-2">Lead to cash <span class="tag-pill">sales</span></div>
+        <button class="btn btn-sm ai-btn mb-2"><span class="ai-badge">AI</span> Draft to-be steps from as-is</button>
+        <div class="row g-2">
+          <div class="col-6">
+            <div class="text-secondary mb-1" style="font-size:.7rem">AS-IS</div>
+            <div class="border rounded p-2 small mb-1">Manual triage</div>
+            <div class="border rounded p-2 small">Spreadsheet log</div>
+          </div>
+          <div class="col-6">
+            <div class="text-secondary mb-1" style="font-size:.7rem">TO-BE</div>
+            <div class="border rounded p-2 small mb-1">Auto-routed <span class="ai-badge">AI draft</span></div>
+            <div class="border rounded p-2 small">Dataverse record <span class="ai-badge">AI draft</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="screen-label">6. Requirements log — cross-linked, exportable, draft FDD</div>
+<div class="row g-0 border rounded overflow-hidden">
+  <div class="col-md-2 sidebar p-2">
+    <ul class="nav flex-column">
+      <li class="nav-item"><a class="nav-link px-2 py-2">⌂ Overview</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">✎ Discovery notes</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">☗ Team structure</a></li>
+      <li class="nav-item"><a class="nav-link px-2 py-2">⇄ Process flows</a></li>
+      <li class="nav-item"><a class="nav-link active px-2 py-2">☑ Requirements log</a></li>
+    </ul>
+  </div>
+  <div class="col-md-10 p-3 bg-white">
+    <button class="btn btn-sm ai-btn mb-2"><span class="ai-badge">AI</span> Draft functional design doc</button>
+    <table class="table table-sm">
+      <thead><tr><th>Module</th><th>Notes</th><th>Tags</th><th>Priority</th><th>Type</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Sales</td><td>Quote approval needs manager sign-off</td><td><span class="tag-pill">approval</span></td><td><span class="badge bg-danger">High</span></td><td>Configuration</td><td>Open</td></tr>
+        <tr><td>Field service</td><td>Mobile offline mode required</td><td><span class="tag-pill">mobile</span></td><td><span class="badge bg-warning text-dark">Medium</span></td><td>Customization</td><td>In review</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</body>
+</html>

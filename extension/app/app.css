@@ -1,0 +1,282 @@
+/* Local overrides layered on top of Bootstrap 5 (loaded via CDN in index.html).
+   Extension pages allow remote stylesheets by default under Manifest V3's
+   CSP (only script-src/object-src are locked to 'self'), so real Bootstrap
+   CSS works here — we just don't load Bootstrap's JS bundle since all
+   interactivity is hand-rolled in app.js. */
+
+:root{
+  --navy:#1c2b3a; --blue:#0f6cbd; --blue-dark:#0b5aa1;
+  --ai-purple:#534ab7; --ai-purple-bg:#eeedfe; --ai-purple-border:#cecbf6;
+  --border:#e3e5e8; --muted:#6b7280; --danger:#a4262c;
+  --warning-bg:#fff2cc; --warning-text:#8a6d00; --tag-bg:#e6f1fb; --tag-text:#185fa5;
+}
+html,body{height:100%}
+body{background:#f4f5f7;color:#1c1e21;font-size:14px}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* shell */
+.app-shell{display:flex;flex-direction:column;height:100vh}
+.app-body{display:flex;flex:1;min-height:0}
+.app-main{flex:1;padding:20px 24px;overflow-y:auto;min-width:0;position:relative}
+
+/* At wide widths (full-tab mode, or a side panel dragged open wide), the
+   fixed 24px side padding wastes a growing share of the available room —
+   scale it up modestly instead of leaving content pinned to a narrow
+   column with dead space on either side. */
+@media (min-width:1100px){
+  .app-main{padding:28px 48px}
+  .stakeholder-card-row{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+}
+@media (min-width:1500px){
+  .app-main{padding:32px 72px}
+}
+
+/* title bar */
+.project-titlebar{display:flex;align-items:center;gap:8px;background:var(--navy);color:#fff;padding:10px 14px;flex-shrink:0}
+.btn-icon{background:transparent;border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;padding:5px 9px;font-size:14px;line-height:1;cursor:pointer}
+.btn-icon:disabled{opacity:.6;cursor:default}
+.spin{display:inline-block;animation:spin-anim .8s linear infinite}
+@keyframes spin-anim{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.btn-icon:hover{background:rgba(255,255,255,.12)}
+
+/* Native side panel width can't be controlled via any browser API, so this
+   button is the actual fix when someone wants more room — give it a visible
+   label instead of hiding behind an icon + tooltip that's easy to miss. */
+.maximize-btn{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:5px 11px;font-size:12.5px;font-weight:600;white-space:nowrap;cursor:pointer}
+.maximize-btn:hover{background:rgba(255,255,255,.2)}
+@media (max-width:420px){
+  .maximize-btn-label{display:none}
+  .maximize-btn{padding:5px 9px}
+}
+.project-title-btn{background:none;border:none;color:#fff;font-size:17px;font-weight:600;display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 8px;border-radius:6px}
+.project-title-btn:hover{background:rgba(255,255,255,.08)}
+.project-title-caret{font-size:11px;opacity:.7}
+
+/* project switcher dropdown */
+.dropdown{position:relative}
+.dropdown-menu{display:none;position:absolute;top:100%;left:0;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.16);padding:12px;min-width:300px;max-height:70vh;overflow-y:auto;z-index:1000;margin-top:6px}
+.dropdown-menu.show{display:block}
+.project-item{display:flex;justify-content:space-between;align-items:center;gap:.5rem;padding:6px 8px;cursor:pointer;font-size:13px;border-radius:6px}
+.project-item:hover{background:#f4f5f7}
+.project-item.active-project{background:var(--tag-bg);font-weight:600}
+.project-item .project-meta{font-size:11px;color:var(--muted);font-weight:400}
+.remove-project-btn{color:var(--danger);font-size:12px;cursor:pointer;flex-shrink:0}
+
+/* collapsible left nav */
+.app-sidebar{width:200px;background:var(--navy);color:#e6ebf1;padding:14px 8px;flex-shrink:0;transition:width .15s ease}
+.app-sidebar.collapsed{width:52px}
+.app-sidebar.collapsed .nav-link .nav-label{display:none}
+.app-sidebar.collapsed .nav-link{justify-content:center}
+.nav-link{display:flex;align-items:center;gap:10px;color:#c7d2dc;padding:10px;border-radius:6px;cursor:pointer;font-size:13.5px;margin-bottom:2px}
+.nav-link:hover{color:#fff;background:#2a3c4e}
+.nav-link.active{background:var(--blue);color:#fff}
+.nav-link-disabled{pointer-events:none;opacity:.6}
+.nav-link .nav-icon{font-size:16px;width:18px;text-align:center;flex-shrink:0}
+
+/* Bootstrap Icons — one consistent size/style everywhere (filled glyphs,
+   currentColor so they follow whatever text color their context already
+   uses: white in the dark navy chrome, muted gray for secondary actions,
+   etc. — same family, same weight, same size, just inheriting context). */
+.bi{font-size:1rem;vertical-align:-.125em;line-height:1}
+.nav-icon{font-size:1.05rem;width:18px;text-align:center;flex-shrink:0}
+.project-title-caret{font-size:.7rem;opacity:.75}
+.remove-project-btn, .nb-remove, .del-chat{font-size:.9rem;opacity:.55;line-height:1}
+.remove-project-btn:hover, .nb-remove:hover, .del-chat:hover{opacity:1;color:var(--danger)}
+.fname .bi{margin-right:2px}
+
+/* buttons */
+.btn-ai{background:var(--ai-purple-bg);border-color:var(--ai-purple-border);color:var(--ai-purple)}
+.btn-ai:hover{background:#dedcfa;color:var(--ai-purple)}
+
+/* cards / badges reused from before */
+.ai-badge{background:var(--ai-purple);color:#fff;font-size:.65rem;font-weight:600;padding:.1rem .4rem;border-radius:.5rem}
+.ai-panel{background:#f7f6fe;border:1px solid var(--ai-purple-border);border-radius:.5rem;padding:.6rem .8rem;font-size:.85rem;color:var(--ai-purple)}
+.ai-suggest-card{background:#f7f6fe;border:1px solid var(--ai-purple-border);border-radius:.5rem;padding:.6rem .8rem;margin-bottom:.5rem}
+.ai-note{font-size:.7rem;color:var(--muted);margin-top:.3rem}
+
+/* Stakeholders page: grouped-by-team card layout (name, role, team, bullet
+   responsibilities) editable in place. */
+.stakeholder-search-wrap{position:relative;margin-bottom:16px;max-width:420px}
+.stakeholder-search-wrap .bi-search{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:.85rem}
+.stakeholder-search-wrap input{padding-left:30px}
+.stakeholder-team-group{margin-bottom:22px}
+.stakeholder-team-heading{font-size:14.5px;font-weight:700;margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.stakeholder-card-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.stakeholder-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px 14px}
+.stakeholder-card .sh-field{border:none;background:transparent;padding:1px 2px;font-family:inherit;width:100%;border-radius:4px}
+.stakeholder-card .sh-field:hover,.stakeholder-card .sh-field:focus{background:#f4f6f8;outline:none}
+.stakeholder-card .sh-name{font-weight:700;font-size:14.5px;flex:1}
+.stakeholder-role-line,.stakeholder-team-line{display:flex;align-items:center;gap:6px;font-size:12.5px;margin-top:2px}
+.stakeholder-role-line .sh-field,.stakeholder-team-line .sh-field{flex:1}
+.stakeholder-resp-list{list-style:disc;padding-left:18px;margin:0}
+.stakeholder-resp-list li{margin-bottom:2px}
+.stakeholder-resp-list .sh-field{font-size:12.5px}
+.stakeholder-card .add-resp{font-size:11.5px;text-decoration:none}
+.stakeholder-card .remove-stakeholder{opacity:.5}
+.stakeholder-card:hover .remove-stakeholder{opacity:1}
+
+@media (max-width:560px){
+  .stakeholder-card-row{grid-template-columns:1fr}
+}
+
+/* Team Structure page: AI-inferred org chart rendered as hand-built SVG */
+.structure-legend{display:flex;gap:16px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.structure-legend .legend-swatch{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:middle}
+.legend-team{background:#fde8e8;border:1.5px solid #c0392b}
+.legend-role{background:#e7f7f2;border:1.5px solid #1d9e75}
+.legend-question{background:#f2f2f2;border:1.5px dashed #888}
+.structure-diagram-wrap{overflow:auto;border:1px solid var(--border);border-radius:8px;background:
+  linear-gradient(0deg,transparent 24px,rgba(0,0,0,.035) 25px),linear-gradient(90deg,transparent 24px,rgba(0,0,0,.035) 25px);
+  background-size:25px 25px;padding:6px}
+/* The SVG scales down to fill whatever width the panel/tab gives it (down to
+   a readable floor set inline per-diagram via min-width) instead of always
+   rendering at a fixed pixel size — small screens shrink the whole diagram
+   proportionally; once it hits the floor, the wrap scrolls horizontally
+   instead of squeezing labels past legibility. */
+.structure-svg{display:block;width:100%;height:auto}
+.structure-node rect{stroke-width:1.5;fill:#fff}
+.structure-node.node-team rect{stroke:#c0392b;fill:#fef5f5}
+.structure-node.node-role rect{stroke:#1d9e75;fill:#f2fbf8}
+.structure-node.node-question rect{stroke:#888;stroke-dasharray:4 3;fill:#f7f7f7}
+.structure-node-box{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box;padding:6px 6px 5px}
+.structure-node-label{text-align:center;font-size:11.5px;font-weight:600;line-height:1.3;color:var(--text,#1a1a1a);white-space:pre-line}
+.structure-node.node-question .structure-node-label{font-weight:500;font-style:italic;color:#555}
+.structure-node-names{margin-top:5px;padding-top:4px;border-top:1px solid rgba(0,0,0,.08);width:100%;text-align:center}
+.structure-node-name{font-size:10px;line-height:1.45;color:#444}
+.structure-node-name-more{color:var(--muted);font-style:italic}
+.structure-edge{fill:none;stroke:#9aa5b1;stroke-width:1.5}
+.structure-arrow-fill{fill:#9aa5b1}
+.ai-inline-tag{background:var(--ai-purple-bg);color:var(--ai-purple);font-size:.65rem;padding:.1rem .4rem;border-radius:.5rem;margin-left:.3rem}
+.tag-pill{background:var(--tag-bg);color:var(--tag-text);font-size:.7rem;padding:.15rem .5rem;border-radius:.7rem}
+.empty{font-size:.85rem;color:#8a8f98;padding:1rem;text-align:center;background:#fff;border:1px dashed #d4d8dd;border-radius:.5rem}
+.activity-item{font-size:.8rem;padding:.35rem 0;border-bottom:1px solid #eef0f2}
+.activity-item:last-child{border-bottom:none}
+.metric-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.metric{background:#f4f5f7;border-radius:8px;padding:12px}
+.metric .num{font-size:22px;font-weight:600}
+.metric .lbl{font-size:11px;color:var(--muted)}
+@media (max-width:600px){ .metric-grid{grid-template-columns:1fr 1fr} }
+
+/* Notion-style Notes tree: any item can hold notes AND contain child items;
+   the folder/file icon is purely derived from whether it has children. */
+.notes-layout{display:flex;gap:16px;align-items:flex-start}
+.notebook-rail-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:6px;padding-left:2px}
+.notebook-rail-wrap{width:210px;flex-shrink:0}
+.notebook-rail{display:flex;flex-direction:column}
+.notebook-content{flex:1;min-width:0}
+.notebook-breadcrumb{font-size:11.5px;color:var(--muted);margin-bottom:4px}
+
+.add-notebook-btn{border:1px dashed #b9c0c9;background:#fff;border-radius:8px;padding:8px 6px;font-size:12px;color:var(--muted);cursor:pointer;text-align:center}
+.add-notebook-btn:hover{background:#f8f9fb}
+
+.tree-node{display:flex;flex-direction:column}
+.tree-row{display:flex;align-items:center;gap:5px;padding:6px 8px 6px 0;font-size:13px;border-radius:6px;cursor:pointer;user-select:none}
+.tree-row:hover{background:#eef1f4}
+.tree-row.active{background:#eef4fb;font-weight:600}
+.tree-row.tree-drop-target{background:#dcebfd;outline:1.5px dashed var(--blue)}
+.tree-row.tree-drop-before{box-shadow:inset 0 2px 0 0 var(--blue)}
+.tree-row.tree-drop-after{box-shadow:inset 0 -2px 0 0 var(--blue)}
+.tree-caret{width:16px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:var(--muted)}
+.tree-caret-hidden{visibility:hidden}
+.tree-icon{flex-shrink:0;color:#c0392b}
+.tree-row.active .tree-icon{color:var(--blue)}
+.tree-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tree-row .nb-remove{opacity:0;font-size:12px;flex-shrink:0}
+.tree-row:hover .nb-remove{opacity:.5}
+.tree-row .nb-remove:hover{opacity:1 !important;color:var(--danger)}
+.tree-children{display:flex;flex-direction:column}
+.tree-root-dropzone{font-size:11px;color:var(--muted);border:1px dashed var(--border);border-radius:6px;padding:6px 8px;margin-bottom:8px;text-align:center}
+.tree-root-dropzone.tree-drop-target{background:#dcebfd;border-color:var(--blue);color:var(--blue)}
+
+.big-textarea{width:100%;min-height:min(55vh,480px);font-size:14px;line-height:1.7;padding:16px;border:1px solid var(--border);border-radius:8px}
+.big-textarea:focus{outline:2px solid var(--blue);outline-offset:-1px}
+.big-textarea .md-block:only-child:empty:before{content:"Description of meeting";color:#9aa0a8}
+.md-block{min-height:1.4em}
+.md-block.md-h1{font-size:1.5em;font-weight:600;margin:.3em 0}
+.md-block.md-h2{font-size:1.25em;font-weight:600;margin:.25em 0}
+.md-block.md-h3{font-size:1.1em;font-weight:600;margin:.2em 0}
+.md-block.md-li{padding-left:1.2em;position:relative}
+.md-block.md-li:before{content:"•";position:absolute;left:.2em}
+.md-li-render{padding-left:1.2em;position:relative}
+h5, .meeting-desc h3, .meeting-desc h4, .meeting-desc h5{margin:.3em 0}
+details{background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 12px}
+details summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);list-style:none}
+details summary::-webkit-details-marker{display:none}
+details summary:before{content:"▸ ";display:inline-block;transition:transform .1s}
+details[open] summary:before{content:"▾ "}
+.transcript-row{background:#fafbfc;border:1px solid var(--border);border-radius:6px;padding:8px;font-size:11.5px;margin-bottom:8px}
+.transcript-row .fname{font-weight:600;display:block;margin-bottom:2px}
+.docx-drop{border:1px dashed #b5d4f4;background:#f4f9fe;border-radius:.5rem;padding:.6rem .8rem;font-size:.8rem;color:#185fa5;margin-bottom:10px}
+.meeting-card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:10px}
+.meeting-card summary{display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;list-style:none}
+.meeting-card summary::-webkit-details-marker{display:none}
+.meeting-card summary:before{content:"▸ ";display:inline-block;color:var(--muted);font-size:.75em}
+.meeting-card[open] summary:before{content:"▾ "}
+.meeting-title{font-weight:700;font-size:15.5px}
+.meeting-date{font-size:11.5px;color:var(--muted);white-space:nowrap;flex-shrink:0}
+.meeting-body{padding-top:10px;margin-top:8px;border-top:1px solid var(--border)}
+.meeting-desc{font-size:13.5px;line-height:1.5}
+
+/* Notes compose area: one free-text note per item, autosaving — no manual
+   Save button, no history list. */
+.autosave-indicator{font-size:11px;color:var(--muted);font-style:italic}
+
+/* narrow widths (default side panel is ~320px) — minimize chrome so the
+   compose box dominates the window */
+@media (max-width:560px){
+  .app-main{padding:12px 14px}
+  .notes-layout{flex-direction:column}
+  .notebook-rail-wrap{width:100%}
+  .notebook-rail{width:100%}
+  .tree-row{font-size:12.5px}
+  h2{font-size:16px}
+  .big-textarea{min-height:min(60vh,520px)}
+}
+
+/* chat page */
+.chat-shell{display:flex;gap:16px;height:calc(100vh - 160px);min-height:360px}
+.chat-threads{width:210px;flex-shrink:0;background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px;overflow-y:auto}
+.chat-thread-item{padding:8px;border-radius:6px;font-size:12.5px;cursor:pointer;margin-bottom:2px;display:flex;justify-content:space-between;align-items:center;gap:4px}
+.chat-thread-item:hover{background:#f4f5f7}
+.chat-thread-item.active{background:var(--tag-bg);font-weight:600}
+.chat-thread-item .del-chat{opacity:.6;font-size:11px}
+.chat-main{flex:1;display:flex;flex-direction:column;background:#fff;border:1px solid var(--border);border-radius:8px;overflow:hidden;min-width:0}
+.chat-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.chat-bubble{max-width:78%;padding:9px 13px;border-radius:12px;font-size:13.5px;line-height:1.5;white-space:pre-wrap}
+.chat-bubble.user{align-self:flex-end;background:var(--blue);color:#fff;border-bottom-right-radius:3px}
+.chat-bubble.assistant{align-self:flex-start;background:#f4f5f7;color:#1c1e21;border-bottom-left-radius:3px}
+.chat-bubble.error{align-self:flex-start;background:#fde2e1;color:var(--danger)}
+.chat-bubble p{margin:0 0 .5em}
+.chat-bubble p:last-child{margin-bottom:0}
+.chat-bubble ul, .chat-bubble ol{margin:.2em 0 .5em;padding-left:1.2em}
+.chat-bubble ul:last-child, .chat-bubble ol:last-child{margin-bottom:0}
+.chat-bubble .chat-md-h{font-size:1em;font-weight:700;margin:.4em 0 .2em}
+.chat-bubble .chat-md-h:first-child{margin-top:0}
+.chat-bubble code{background:rgba(0,0,0,.08);padding:1px 4px;border-radius:4px;font-size:.9em}
+.chat-input-row{border-top:1px solid var(--border);padding:10px;display:flex;gap:8px;align-items:flex-end}
+.chat-input-row textarea{flex:1;resize:none}
+.chat-empty{margin:auto;text-align:center;color:var(--muted);font-size:13px;padding:20px}
+@media (max-width:700px){ .chat-shell{flex-direction:column;height:auto} .chat-threads{width:100%;max-height:140px} }
+
+/* Embedded split-view pane: this same index.html loaded inside a workspace
+   iframe (?embed=1) shows only its page content — no titlebar, no primary
+   nav sidebar, since the parent workspace already provides its own compact
+   header with a close button per pane. */
+.embed-pane .project-titlebar, .embed-pane .app-sidebar{display:none}
+.embed-pane .app-main{padding:14px 16px}
+
+/* Split-view workspace: drag a nav item to an edge/corner of the content
+   area to snap it into up to 4 resizable-by-count panes, each a fully
+   independent, fully interactive embedded instance of the app. Only wired
+   up in full-tab mode (see isFullTabMode in app.js) — never in the side
+   panel, where there isn't room for this to make sense. */
+.nav-link-draggable{cursor:grab}
+.nav-link-draggable:active{cursor:grabbing}
+.snap-zone-hint{position:absolute;background:rgba(15,108,189,.22);border:2px dashed var(--blue);border-radius:8px;pointer-events:none;z-index:50;transition:left .08s ease,top .08s ease,width .08s ease,height .08s ease}
+.workspace-overlay{position:absolute;inset:0;background:#e9ecf0;gap:3px;z-index:10}
+.workspace-pane{background:#fff;display:flex;flex-direction:column;min-width:0;min-height:0;border:1px solid var(--border)}
+.workspace-pane-header{display:flex;align-items:center;gap:7px;padding:6px 10px;background:var(--navy);color:#fff;font-size:12px;font-weight:600;flex-shrink:0}
+.workspace-pane-header span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.workspace-pane-close{background:transparent;border:none;color:#fff;opacity:.7;font-size:11px;cursor:pointer;padding:2px 4px;line-height:1}
+.workspace-pane-close:hover{opacity:1}
+.workspace-pane iframe{flex:1;border:none;width:100%;height:100%}
