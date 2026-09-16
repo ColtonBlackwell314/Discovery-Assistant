@@ -746,6 +746,9 @@ async function init(){
 
   // Settings gear panel
   setupSettingsPanel();
+
+  // Global search bar
+  setupGlobalSearch();
 }
 
 function setupSettingsPanel(){
@@ -786,6 +789,284 @@ function setupSettingsPanel(){
     await saveApiKey("");
     updateKeyUI();
   };
+}
+
+/* ---------------- Global search ----------------
+   Always-visible search bar between the title bar and content area.
+   Searches across notes (name + content + tags), stakeholders (name +
+   title + team + responsibilities + tags), transcripts (filename + text),
+   and chat messages. Results are grouped by source type, each showing
+   what matched, where (breadcrumb/section), relevant tags, and a
+   timestamp. Click a result to navigate directly to it. */
+
+function globalSearch(query){
+  const q = (query || "").trim().toLowerCase();
+  if(!q) return [];
+  const results = [];
+  const words = q.split(/\s+/).filter(Boolean);
+
+  function matches(text){
+    if(!text) return false;
+    const t = text.toLowerCase();
+    return words.every(w => t.includes(w));
+  }
+  function scoreText(text){
+    if(!text) return 0;
+    const t = text.toLowerCase();
+    let score = 0;
+    words.forEach(w => {
+      let idx = 0;
+      while((idx = t.indexOf(w, idx)) !== -1){ score++; idx += w.length; }
+    });
+    return score;
+  }
+  function snippetAround(text, maxLen){
+    if(!text) return "";
+    const t = text.toLowerCase();
+    const firstWord = words[0] || q;
+    let idx = t.indexOf(firstWord);
+    if(idx === -1) idx = 0;
+    const start = Math.max(0, idx - 40);
+    const end = Math.min(text.length, start + maxLen);
+    let snip = (start > 0 ? "..." : "") + text.slice(start, end) + (end < text.length ? "..." : "");
+    return snip;
+  }
+
+  // --- Search notes items ---
+  (state.items || []).forEach(it => {
+    const haystack = [it.name, it.desc, ...(it.tags || [])].join(" ");
+    if(!matches(haystack)) return;
+    const score = scoreText(it.name) * 3 + scoreText(it.desc) + scoreText((it.tags||[]).join(" ")) * 2;
+    results.push({
+      type: "note",
+      id: it.id,
+      title: it.name,
+      snippet: snippetAround(it.desc || "", 140),
+      path: itemPath(it.id),
+      tags: it.tags || [],
+      ts: it.ts,
+      score
+    });
+  });
+
+  // --- Search stakeholders ---
+  (state.stakeholders || []).forEach((p, i) => {
+    const haystack = [p.name, p.title, p.team, ...(p.responsibilities||[]), ...(p.tags||[])].join(" ");
+    if(!matches(haystack)) return;
+    const score = scoreText(p.name) * 3 + scoreText(p.title) * 2 + scoreText(p.team) * 2 +
+      scoreText((p.responsibilities||[]).join(" ")) + scoreText((p.tags||[]).join(" ")) * 2;
+    const respSnip = (p.responsibilities||[]).find(r => matches(r)) || (p.responsibilities||[])[0] || "";
+    results.push({
+      type: "stakeholder",
+      index: i,
+      title: p.name || "(unnamed)",
+      snippet: [p.title, p.team, respSnip].filter(Boolean).join(" · "),
+      tags: p.tags || [],
+      score
+    });
+  });
+
+  // --- Search transcripts ---
+  (state.transcripts || []).forEach(t => {
+    const haystack = [t.filename, t.text].join(" ");
+    if(!matches(haystack)) return;
+    const score = scoreText(t.filename) * 3 + scoreText(t.text);
+    results.push({
+      type: "transcript",
+      id: t.id,
+      title: t.filename,
+      snippet: snippetAround(t.text || "", 140),
+      ts: t.ts,
+      score
+    });
+  });
+
+  // --- Search chat messages ---
+  (state.chats || []).forEach(c => {
+    (c.messages || []).forEach(m => {
+      if(!matches(m.text)) return;
+      const score = scoreText(m.text);
+      results.push({
+        type: "chat",
+        chatId: c.id,
+        title: c.title,
+        snippet: snippetAround(m.text || "", 140),
+        role: m.role,
+        ts: m.ts,
+        score
+      });
+    });
+  });
+
+  // Sort by relevance score descending
+  results.sort((a, b) => b.score - a.score);
+  return results;
+}
+
+function highlightSnippet(text, query){
+  if(!text || !query) return escapeHtml(text || "");
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  let html = escapeHtml(text);
+  words.forEach(w => {
+    const ew = escapeHtml(w);
+    const regex = new RegExp(`(${ew.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, "gi");
+    html = html.replace(regex, "<mark>$1</mark>");
+  });
+  return html;
+}
+
+function renderGlobalSearchResults(query){
+  const container = document.getElementById("globalSearchResults");
+  const clearBtn = document.getElementById("globalSearchClear");
+  const kbdHint = document.getElementById("globalSearchKbd");
+
+  if(!query || !query.trim()){
+    container.style.display = "none";
+    clearBtn.style.display = "none";
+    kbdHint.style.display = "";
+    return;
+  }
+  kbdHint.style.display = "none";
+  clearBtn.style.display = "";
+
+  const results = globalSearch(query);
+  container.style.display = "";
+
+  if(!results.length){
+    container.innerHTML = `<div class="gsr-empty"><i class="bi bi-search"></i>No results for "${escapeHtml(query)}"</div>`;
+    return;
+  }
+
+  // Group by type
+  const groups = { note: [], stakeholder: [], transcript: [], chat: [] };
+  results.forEach(r => { if(groups[r.type]) groups[r.type].push(r); });
+
+  const groupMeta = {
+    note: { label: "Notes", icon: "gsr-icon-note", biIcon: "bi-journal-text" },
+    stakeholder: { label: "Stakeholders", icon: "gsr-icon-stakeholder", biIcon: "bi-people-fill" },
+    transcript: { label: "Transcripts", icon: "gsr-icon-transcript", biIcon: "bi-mic-fill" },
+    chat: { label: "Chat", icon: "gsr-icon-chat", biIcon: "bi-chat-dots-fill" }
+  };
+
+  let html = "";
+  for(const [type, items] of Object.entries(groups)){
+    if(!items.length) continue;
+    const meta = groupMeta[type];
+    const shown = items.slice(0, 8); // cap per group
+    html += `<div class="gsr-group">
+      <div class="gsr-group-header">${meta.label} (${items.length})</div>
+      ${shown.map(r => {
+        const tagHtml = (r.tags || []).map(t => `<span class="gsr-meta-tag" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`).join("");
+        const metaParts = [];
+        if(r.path) metaParts.push(`<span class="gsr-meta-text">${escapeHtml(r.path)}</span>`);
+        if(r.role) metaParts.push(`<span class="gsr-meta-text">${r.role === "user" ? "You" : "AI"}</span>`);
+        if(r.ts) metaParts.push(`<span class="gsr-meta-text">${formatDateLabel(r.ts)}</span>`);
+        return `<div class="gsr-item" data-type="${type}" data-id="${r.id || ""}" data-index="${r.index ?? ""}" data-chatid="${r.chatId || ""}">
+          <div class="gsr-item-icon ${meta.icon}"><i class="bi ${meta.biIcon}"></i></div>
+          <div class="gsr-item-body">
+            <div class="gsr-item-title">${highlightSnippet(r.title, query)}</div>
+            <div class="gsr-item-snippet">${highlightSnippet(r.snippet, query)}</div>
+            <div class="gsr-item-meta">${metaParts.join("")}${tagHtml}</div>
+          </div>
+        </div>`;
+      }).join("")}
+      ${items.length > 8 ? `<div class="gsr-meta-text" style="padding:4px 14px 8px">+ ${items.length - 8} more</div>` : ""}
+    </div>`;
+  }
+  container.innerHTML = html;
+
+  // Click handlers — navigate to the result
+  container.querySelectorAll(".gsr-item").forEach(el => {
+    el.onclick = () => {
+      const type = el.dataset.type;
+      const input = document.getElementById("globalSearchInput");
+      container.style.display = "none";
+
+      if(type === "note"){
+        activeItemId = el.dataset.id;
+        activeNav = "notes";
+        renderNav();
+        renderSection();
+      } else if(type === "stakeholder"){
+        activeNav = "stakeholders";
+        renderNav();
+        renderSection();
+        // Pre-fill search with query so the relevant card is visible
+        setTimeout(() => {
+          const sh = document.getElementById("stakeholderSearch");
+          if(sh){ sh.value = input.value; sh.dispatchEvent(new Event("input")); }
+        }, 50);
+      } else if(type === "transcript"){
+        activeNav = "transcripts";
+        renderNav();
+        renderSection();
+      } else if(type === "chat"){
+        activeChatId = el.dataset.chatid;
+        activeNav = "chat";
+        renderNav();
+        renderSection();
+      }
+    };
+  });
+
+  // Clickable tags in results → refine search
+  container.querySelectorAll(".gsr-meta-tag").forEach(tag => {
+    tag.onclick = (e) => {
+      e.stopPropagation();
+      const input = document.getElementById("globalSearchInput");
+      input.value = tag.dataset.tag;
+      renderGlobalSearchResults(tag.dataset.tag);
+    };
+  });
+}
+
+function setupGlobalSearch(){
+  const input = document.getElementById("globalSearchInput");
+  const container = document.getElementById("globalSearchResults");
+  const clearBtn = document.getElementById("globalSearchClear");
+  let debounceTimer = null;
+
+  input.addEventListener("input", () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      renderGlobalSearchResults(input.value);
+    }, 150);
+  });
+
+  input.addEventListener("focus", () => {
+    if(input.value.trim()) renderGlobalSearchResults(input.value);
+  });
+
+  clearBtn.onclick = () => {
+    input.value = "";
+    container.style.display = "none";
+    clearBtn.style.display = "none";
+    document.getElementById("globalSearchKbd").style.display = "";
+  };
+
+  // "/" keyboard shortcut to focus search
+  document.addEventListener("keydown", (e) => {
+    if(e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey){
+      const active = document.activeElement;
+      const isEditing = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+      if(!isEditing){
+        e.preventDefault();
+        input.focus();
+      }
+    }
+    // Escape closes results
+    if(e.key === "Escape" && container.style.display !== "none"){
+      container.style.display = "none";
+      input.blur();
+    }
+  });
+
+  // Click outside closes results
+  document.addEventListener("click", (e) => {
+    if(!e.target.closest(".global-search-bar")){
+      container.style.display = "none";
+    }
+  });
 }
 
 // The toolbar icon opens this same page either as a side panel or, via the
