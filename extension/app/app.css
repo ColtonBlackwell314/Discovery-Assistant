@@ -308,3 +308,32 @@ details[open] summary:before{content:"▾ "}
 .ie-summary{display:flex;flex-wrap:wrap;gap:12px 24px}
 .ie-stat{font-size:13px;color:#555}
 .ie-stat-num{font-weight:700;color:var(--navy);margin-right:3px}
+
+/* Cards / Org chart view toggle (Step 7) */
+.view-toggle{display:flex;gap:0;background:#eef0f3;border-radius:8px;padding:3px;width:fit-content}
+.view-toggle-btn{border:none;background:transparent;padding:6px 14px;font-size:12.5px;font-weight:600;border-radius:6px;cursor:pointer;color:var(--muted);display:flex;align-items:center;gap:5px}
+.view-toggle-btn.active{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.view-toggle-btn:hover:not(.active){color:var(--navy)}
+
+/* Settings panel (Step 8) — dropdown under the gear icon */
+.settings-panel{background:#fff;border-bottom:1px solid var(--border);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.settings-panel-header{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;font-size:13px;font-weight:700;color:var(--navy);border-bottom:1px solid var(--border)}
+.settings-panel-close{background:none;border:none;font-size:14px;cursor:pointer;color:var(--muted);padding:2px 4px}
+.settings-panel-close:hover{color:var(--navy)}
+.settings-panel-body{padding:12px 14px}
+
+/* Template picker menu (Step 6) */
+.template-picker-menu{background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.15);padding:4px;z-index:2000;min-width:220px}
+.template-picker-title{padding:6px 10px;font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.template-picker-item{padding:7px 12px;font-size:13px;border-radius:5px;cursor:pointer;display:flex;align-items:center;gap:8px}
+.template-picker-item:hover{background:#f0f4f8}
+.template-picker-item i{color:var(--blue);font-size:14px;width:16px;text-align:center}
+
+/* Tags on notes and stakeholders (Step 5) */
+.note-tags-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.note-tag-pills{display:inline-flex;gap:4px;flex-wrap:wrap}
+.stakeholder-tags-line{display:flex;align-items:center;gap:6px;font-size:12.5px;margin-top:2px}
+.stakeholder-tags-line .sh-field{flex:1}
+.sh-tag-pills{display:flex;gap:4px;flex-wrap:wrap}
+.tag-clickable{cursor:pointer}
+.tag-clickable:hover{background:var(--blue);color:#fff}

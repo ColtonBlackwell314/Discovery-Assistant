@@ -29,9 +29,25 @@
         <button class="btn btn-sm btn-primary w-100" id="newSessionBtn"><i class="bi bi-plus-circle-fill"></i> New project</button>
       </div>
     </div>
+    <button class="btn btn-sm btn-icon" id="settingsBtn" title="Settings"><i class="bi bi-gear-fill"></i></button>
     <button class="btn btn-sm maximize-btn" id="maximizeBtn" title="Side panel width is fixed by the browser — open as a full tab for more room" style="display:none">
       <i class="bi bi-arrows-angle-expand"></i> <span class="maximize-btn-label">Open full tab</span>
     </button>
+  </div>
+  <div class="settings-panel" id="settingsPanel" style="display:none">
+    <div class="settings-panel-header">
+      <span>Settings</span>
+      <button class="settings-panel-close" id="settingsPanelClose"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="settings-panel-body">
+      <label class="form-label small fw-semibold">Gemini API Key</label>
+      <div class="d-flex gap-2 align-items-center flex-wrap">
+        <input type="password" id="apiKeyInput" class="form-control form-control-sm" placeholder="Paste your Gemini API key" style="max-width:260px">
+        <button class="btn btn-sm btn-primary" id="saveKeyBtn">Save</button>
+        <button class="btn btn-sm btn-outline-danger" id="clearKeyBtn" style="display:none">Remove</button>
+      </div>
+      <div class="small mt-1" id="keyStatus"></div>
+    </div>
   </div>
 
   <div class="app-body">

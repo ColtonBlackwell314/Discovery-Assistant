@@ -4,13 +4,11 @@
    calls made from the Chat page, and only when you send a chat message. */
 
 const NAV = [
-  {key:"chat", name:"Chat", icon:"bi-chat-dots-fill"},
   {key:"notes", name:"Notes", icon:"bi-journal-text"},
   {key:"stakeholders", name:"Stakeholders", icon:"bi-people-fill"},
-  {key:"teamstructure", name:"Team Structure", icon:"bi-diagram-3-fill"},
   {key:"transcripts", name:"Transcripts", icon:"bi-mic-fill"},
-  {key:"importexport", name:"Import / Export", icon:"bi-arrow-left-right"},
-  {key:"apikey", name:"API Key", icon:"bi-key-fill"}
+  {key:"chat", name:"Chat", icon:"bi-chat-dots-fill"},
+  {key:"importexport", name:"Import / Export", icon:"bi-arrow-left-right"}
 ];
 const NOTEBOOK_COLORS = ["#0f6cbd","#1d9e75","#d85a30","#993c1d","#7f77dd","#d4537e","#639922"];
 const STORAGE_KEY = "d365_discovery_sessions";
@@ -26,7 +24,7 @@ function endpointFor(model){ return `https://generativelanguage.googleapis.com/v
 let allProjects = {};
 let currentId = null;
 let state = null;
-let activeNav = "chat";
+let activeNav = "notes";
 let activeItemId = null;
 let activeChatId = null;
 let geminiApiKey = "";
@@ -210,7 +208,7 @@ async function callGeminiWithModel(model, systemInstruction, contents, generatio
 // JSON (responseMimeType) and parses it, for structured-extraction features
 // like the Stakeholders refresh. Throws if the model never returns valid JSON.
 async function callGeminiForJSON(systemInstructionText, userText){
-  if(!geminiApiKey) throw new Error("No Gemini API key configured. Add one on the Overview page.");
+  if(!geminiApiKey) throw new Error("No Gemini API key configured. Add one via the ⚙ Settings gear in the title bar.");
   const systemInstruction = { parts: [{ text: systemInstructionText }] };
   const contents = [{ role: "user", parts: [{ text: userText }] }];
   const generationConfig = { responseMimeType: "application/json" };
@@ -235,7 +233,7 @@ async function callGeminiForJSON(systemInstructionText, userText){
 }
 
 async function callGemini(history){
-  if(!geminiApiKey) throw new Error("No Gemini API key configured. Add one on the Overview page.");
+  if(!geminiApiKey) throw new Error("No Gemini API key configured. Add one via the ⚙ Settings gear in the title bar.");
   const systemInstruction = {
     parts: [{ text:
       `You are an assistant helping a Microsoft Dynamics 365 CRM consultant think through discovery for a specific client project called "${state.name}". ` +
@@ -337,8 +335,12 @@ async function refreshAllFromNotes(onProgress){
   await refreshTeamStructureFromNotes();
 }
 
+let stakeholderView = "cards"; // "cards" or "orgchart"
+
 function renderStakeholders(body){
-  const lastRefreshed = state.stakeholdersUpdatedAt ? timeAgoLabel(state.stakeholdersUpdatedAt) : null;
+  const lastRefreshedSH = state.stakeholdersUpdatedAt ? timeAgoLabel(state.stakeholdersUpdatedAt) : null;
+  const lastRefreshedTS = state.teamStructureUpdatedAt ? timeAgoLabel(state.teamStructureUpdatedAt) : null;
+  const lastRefreshed = lastRefreshedSH || lastRefreshedTS;
 
   body.innerHTML = `
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
@@ -351,9 +353,53 @@ function renderStakeholders(body){
       <button class="btn btn-primary btn-sm" id="refreshStakeholdersBtn"><i class="bi bi-arrow-clockwise"></i> Refresh from notes</button>
     </div>
     <div class="ai-note" id="stakeholdersStatus" style="display:none"></div>
+    <div class="view-toggle mb-3">
+      <button class="view-toggle-btn ${stakeholderView==="cards"?"active":""}" data-view="cards"><i class="bi bi-people-fill"></i> Cards</button>
+      <button class="view-toggle-btn ${stakeholderView==="orgchart"?"active":""}" data-view="orgchart"><i class="bi bi-diagram-3-fill"></i> Org chart</button>
+    </div>
+    <div id="stakeholderViewBody"></div>
+  `;
+
+  const viewBody = document.getElementById("stakeholderViewBody");
+  const statusEl = document.getElementById("stakeholdersStatus");
+
+  body.querySelectorAll(".view-toggle-btn").forEach(btn => {
+    btn.onclick = () => {
+      stakeholderView = btn.dataset.view;
+      rerenderKeepScroll();
+    };
+  });
+
+  if(stakeholderView === "orgchart"){
+    renderTeamStructureInline(viewBody, statusEl);
+  } else {
+    renderStakeholderCards(viewBody, statusEl);
+  }
+
+  document.getElementById("refreshStakeholdersBtn").onclick = async () => {
+    const btn = document.getElementById("refreshStakeholdersBtn");
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Refreshing...`;
+    statusEl.style.display = "";
+    statusEl.textContent = "Asking Gemini to scan all notes and transcripts...";
+    try{
+      await refreshAllFromNotes((msg) => { statusEl.textContent = msg; });
+      statusEl.style.display = "none";
+      rerenderKeepScroll();
+    }catch(err){
+      statusEl.textContent = "Couldn't refresh: " + err.message;
+    }finally{
+      btn.disabled = false;
+      btn.innerHTML = `<i class="bi bi-arrow-clockwise"></i> Refresh from notes`;
+    }
+  };
+}
+
+function renderStakeholderCards(viewBody, statusEl){
+  viewBody.innerHTML = `
     <div class="stakeholder-search-wrap">
       <i class="bi bi-search"></i>
-      <input type="text" id="stakeholderSearch" class="form-control form-control-sm" placeholder="Search stakeholders by name, title, team, or responsibility...">
+      <input type="text" id="stakeholderSearch" class="form-control form-control-sm" placeholder="Search by name, title, team, tag, or responsibility...">
     </div>
     <div id="stakeholdersCards" class="stakeholder-grid"></div>
     <div class="empty" id="stakeholderNoResults" style="display:none">No stakeholders match "<span id="stakeholderNoResultsQuery"></span>".</div>
@@ -361,13 +407,11 @@ function renderStakeholders(body){
   `;
 
   const cardsWrap = document.getElementById("stakeholdersCards");
-  const statusEl = document.getElementById("stakeholdersStatus");
   const searchInput = document.getElementById("stakeholderSearch");
   const noResultsEl = document.getElementById("stakeholderNoResults");
   let searchQuery = "";
 
   function groupByTeam(list){
-    // expects each item to already carry its true index into state.stakeholders as _i
     const groups = new Map();
     list.forEach((p) => {
       const key = p.team && p.team.trim() ? p.team.trim() : "Unassigned";
@@ -379,7 +423,7 @@ function renderStakeholders(body){
 
   function matchesSearch(p, q){
     if(!q) return true;
-    const haystack = [p.name, p.title, p.team, ...(p.responsibilities||[])].join(" ").toLowerCase();
+    const haystack = [p.name, p.title, p.team, ...(p.responsibilities||[]), ...(p.tags||[])].join(" ").toLowerCase();
     return haystack.includes(q);
   }
 
@@ -391,8 +435,6 @@ function renderStakeholders(body){
       return;
     }
     const q = searchQuery.trim().toLowerCase();
-    // keep original indices (_i) so edits/removes still target the right item in state.stakeholders,
-    // even while a search filter is narrowing what's shown
     const list = full.map((p, i) => ({ ...p, _i: i })).filter(p => matchesSearch(p, q));
     if(!list.length){
       cardsWrap.innerHTML = "";
@@ -422,6 +464,10 @@ function renderStakeholders(body){
                 <span class="text-secondary small">Team:</span>
                 <input type="text" class="sh-field sh-team" value="${escapeHtml(p.team || "")}" placeholder="Team">
               </div>
+              <div class="stakeholder-tags-line">
+                <span class="text-secondary small">Tags:</span>
+                <input type="text" class="sh-field sh-tags" value="${escapeHtml((p.tags||[]).join(", "))}" placeholder="e.g. lead-routing, SLA">
+              </div>
               <div class="text-secondary small mt-2 mb-1">Responsibilities:</div>
               <ul class="stakeholder-resp-list" data-i="${p._i}">
                 ${(p.responsibilities && p.responsibilities.length ? p.responsibilities : [""]).map((r, ri) => `
@@ -429,6 +475,7 @@ function renderStakeholders(body){
                 `).join("")}
               </ul>
               <button class="btn btn-sm btn-link p-0 add-resp" data-i="${p._i}">+ add line</button>
+              ${(p.tags||[]).length ? `<div class="sh-tag-pills mt-1">${(p.tags||[]).map(t => `<span class="tag-pill tag-clickable" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`).join(" ")}</div>` : ""}
             </div>`).join("")}
         </div>`;
       cardsWrap.appendChild(section);
@@ -438,10 +485,12 @@ function renderStakeholders(body){
       const i = Number(card.dataset.i);
       const save = async () => {
         const resp = Array.from(card.querySelectorAll(".sh-resp")).map(inp => inp.value.trim()).filter(Boolean);
+        const tags = parseTags(card.querySelector(".sh-tags").value);
         state.stakeholders[i] = {
           name: card.querySelector(".sh-name").value.trim(),
           title: card.querySelector(".sh-title").value.trim(),
           team: card.querySelector(".sh-team").value.trim(),
+          tags: tags,
           responsibilities: resp
         };
         await persist();
@@ -459,34 +508,124 @@ function renderStakeholders(body){
         renderCards();
       };
     });
+    // Clickable tag pills → fill search
+    cardsWrap.querySelectorAll(".tag-clickable").forEach(pill => {
+      pill.onclick = () => {
+        searchInput.value = pill.dataset.tag;
+        searchQuery = pill.dataset.tag;
+        renderCards();
+      };
+    });
   }
   renderCards();
 
   searchInput.oninput = () => { searchQuery = searchInput.value; renderCards(); };
 
   document.getElementById("addStakeholderBtn").onclick = async () => {
-    state.stakeholders.push({ name:"", title:"", team:"", responsibilities:[] });
+    state.stakeholders.push({ name:"", title:"", team:"", tags:[], responsibilities:[] });
     await persist();
     renderCards();
   };
+}
 
-  document.getElementById("refreshStakeholdersBtn").onclick = async () => {
-    const btn = document.getElementById("refreshStakeholdersBtn");
-    btn.disabled = true;
-    btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Refreshing...`;
-    statusEl.style.display = "";
-    statusEl.textContent = "Asking Gemini to scan all notes and transcripts for this project...";
-    try{
-      await refreshStakeholdersFromNotes();
-      statusEl.style.display = "none";
-      rerenderKeepScroll();
-    }catch(err){
-      statusEl.textContent = "Couldn't refresh stakeholders: " + err.message;
-    }finally{
-      btn.disabled = false;
-      btn.innerHTML = `<i class="bi bi-arrow-clockwise"></i> Refresh from notes`;
-    }
-  };
+function renderTeamStructureInline(viewBody, statusEl){
+  viewBody.innerHTML = `
+    <div class="structure-legend">
+      <span><i class="legend-swatch legend-team"></i> Team</span>
+      <span><i class="legend-swatch legend-role"></i> Role / security role</span>
+      <span><i class="legend-swatch legend-question"></i> Open question</span>
+    </div>
+    <div id="structureDiagramWrap" class="structure-diagram-wrap"></div>
+  `;
+
+  const wrap = document.getElementById("structureDiagramWrap");
+
+  const data = state.teamStructure || { nodes: [], edges: [] };
+  const nodes = data.nodes || [];
+  const edges = data.edges || [];
+  if(!nodes.length){
+    wrap.innerHTML = `<div class="empty">No team structure yet. Click "Refresh from notes" above to have AI infer how teams, sub-teams, and roles fit together.</div>`;
+    return;
+  }
+
+  const pos = teamStructureLayout(nodes, edges);
+  const colWidth = 190, baseBoxH = 56, boxW = 152, marginX = 40, marginY = 30;
+  const MAX_NAMES_SHOWN = 4;
+
+  const namesFor = {};
+  const boxHFor = {};
+  nodes.forEach(n => {
+    const names = n.type === "team" ? stakeholderNamesForNode(n.label) : [];
+    namesFor[n.id] = names;
+    boxHFor[n.id] = names.length ? baseBoxH + 16 + Math.min(names.length, MAX_NAMES_SHOWN) * 14 : baseBoxH;
+  });
+  const rowHeights = {};
+  nodes.forEach(n => {
+    const d = pos[n.id].depth;
+    rowHeights[d] = Math.max(rowHeights[d] || 0, boxHFor[n.id]);
+  });
+  const rowGap = 40;
+  const rowOffsetY = {};
+  let cursorY = marginY;
+  const maxDepth = Math.max(...Object.values(pos).map(p => p.depth));
+  for(let d = 0; d <= maxDepth; d++){
+    rowOffsetY[d] = cursorY;
+    cursorY += (rowHeights[d] || baseBoxH) + rowGap;
+  }
+  const maxX = Math.max(...Object.values(pos).map(p => p.x));
+  const svgW = (maxX + 1) * colWidth + marginX * 2;
+  const svgH = cursorY;
+  const minReadableW = Math.min(svgW, (maxX + 1) * 130 + marginX * 2);
+
+  function cx(id){ return marginX + pos[id].x * colWidth + colWidth/2; }
+  function cy(id){ return rowOffsetY[pos[id].depth]; }
+  function typeClass(t){ return t === "role" ? "node-role" : t === "question" ? "node-question" : "node-team"; }
+
+  const edgeSvg = edges.filter(e => pos[e.from] && pos[e.to]).map(e => {
+    const x1 = cx(e.from), y1 = cy(e.from) + boxHFor[e.from];
+    const x2 = cx(e.to), y2 = cy(e.to);
+    const midY = (y1 + y2) / 2;
+    return `<path d="M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}" class="structure-edge" marker-end="url(#arrowhead)"/>`;
+  }).join("");
+
+  const nodeSvg = nodes.map(n => {
+    const p = pos[n.id];
+    if(!p) return "";
+    const boxH = boxHFor[n.id];
+    const x = marginX + p.x * colWidth + (colWidth - boxW)/2;
+    const y = cy(n.id);
+    const cls = typeClass(n.type);
+    const label = escapeHtml(n.label || n.id);
+    const names = namesFor[n.id];
+    const shown = names.slice(0, MAX_NAMES_SHOWN);
+    const extra = names.length - shown.length;
+    const namesHtml = names.length ? `
+      <div class="structure-node-names">
+        ${shown.map(nm => `<div class="structure-node-name">${escapeHtml(nm)}</div>`).join("")}
+        ${extra > 0 ? `<div class="structure-node-name structure-node-name-more">+${extra} more</div>` : ""}
+      </div>` : "";
+    return `
+      <g class="structure-node ${cls}" data-id="${escapeHtml(n.id)}" transform="translate(${x},${y})">
+        <rect width="${boxW}" height="${boxH}" rx="10"></rect>
+        <foreignObject width="${boxW}" height="${boxH}">
+          <div xmlns="http://www.w3.org/1999/xhtml" class="structure-node-box">
+            <div class="structure-node-label">${label}</div>
+            ${namesHtml}
+          </div>
+        </foreignObject>
+      </g>`;
+  }).join("");
+
+  wrap.innerHTML = `
+    <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="xMinYMin meet" class="structure-svg" style="max-width:${svgW}px;min-width:${minReadableW}px">
+      <defs>
+        <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L7,3 z" class="structure-arrow-fill"></path>
+        </marker>
+      </defs>
+      ${edgeSvg}
+      ${nodeSvg}
+    </svg>`;
 }
 
 /* ---------------- Team Structure (AI-inferred org chart) ----------------
@@ -542,145 +681,6 @@ function stakeholderNamesForNode(nodeLabel){
     })
     .map(p => p.name)
     .filter(Boolean);
-}
-
-function renderTeamStructure(body){
-  const lastRefreshed = state.teamStructureUpdatedAt ? timeAgoLabel(state.teamStructureUpdatedAt) : null;
-
-  body.innerHTML = `
-    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-      <div>
-        <h2 style="margin:0">Team Structure</h2>
-        <div class="small text-secondary" id="teamStructureMeta">
-          ${lastRefreshed ? `Last refreshed ${lastRefreshed}` : "Not refreshed yet"}
-        </div>
-      </div>
-      <button class="btn btn-primary btn-sm" id="refreshStructureBtn"><i class="bi bi-arrow-clockwise"></i> Refresh from notes</button>
-    </div>
-    <div class="ai-note" id="structureStatus" style="display:none"></div>
-    <div class="structure-legend">
-      <span><i class="legend-swatch legend-team"></i> Team</span>
-      <span><i class="legend-swatch legend-role"></i> Role / security role</span>
-      <span><i class="legend-swatch legend-question"></i> Open question</span>
-    </div>
-    <div id="structureDiagramWrap" class="structure-diagram-wrap"></div>
-  `;
-
-  const wrap = document.getElementById("structureDiagramWrap");
-  const statusEl = document.getElementById("structureStatus");
-
-  function renderDiagram(){
-    const data = state.teamStructure || { nodes: [], edges: [] };
-    const nodes = data.nodes || [];
-    const edges = data.edges || [];
-    if(!nodes.length){
-      wrap.innerHTML = `<div class="empty">No team structure yet. Click "Refresh from notes" to have AI infer how teams, sub-teams, and roles fit together based on what's been captured so far.</div>`;
-      return;
-    }
-
-    const pos = teamStructureLayout(nodes, edges);
-    const colWidth = 190, baseBoxH = 56, boxW = 152, marginX = 40, marginY = 30;
-    const MAX_NAMES_SHOWN = 4;
-
-    // team nodes get extra box height to fit a stakeholder-name list under the label
-    const namesFor = {};
-    const boxHFor = {};
-    nodes.forEach(n => {
-      const names = n.type === "team" ? stakeholderNamesForNode(n.label) : [];
-      namesFor[n.id] = names;
-      boxHFor[n.id] = names.length ? baseBoxH + 16 + Math.min(names.length, MAX_NAMES_SHOWN) * 14 : baseBoxH;
-    });
-    // row height must clear the tallest box at each depth so rows never overlap
-    const rowHeights = {};
-    nodes.forEach(n => {
-      const d = pos[n.id].depth;
-      rowHeights[d] = Math.max(rowHeights[d] || 0, boxHFor[n.id]);
-    });
-    const rowGap = 40;
-    const rowOffsetY = {};
-    let cursorY = marginY;
-    const maxDepth = Math.max(...Object.values(pos).map(p => p.depth));
-    for(let d = 0; d <= maxDepth; d++){
-      rowOffsetY[d] = cursorY;
-      cursorY += (rowHeights[d] || baseBoxH) + rowGap;
-    }
-    const maxX = Math.max(...Object.values(pos).map(p => p.x));
-    const svgW = (maxX + 1) * colWidth + marginX * 2;
-    const svgH = cursorY;
-    // Below this width, boxes/text would shrink past a readable floor if we
-    // kept scaling the whole diagram down — better to let it scroll
-    // horizontally at that point instead of turning into a squint test.
-    const minReadableW = Math.min(svgW, (maxX + 1) * 130 + marginX * 2);
-
-    function cx(id){ return marginX + pos[id].x * colWidth + colWidth/2; }
-    function cy(id){ return rowOffsetY[pos[id].depth]; }
-    function typeClass(t){ return t === "role" ? "node-role" : t === "question" ? "node-question" : "node-team"; }
-
-    const edgeSvg = edges.filter(e => pos[e.from] && pos[e.to]).map(e => {
-      const x1 = cx(e.from), y1 = cy(e.from) + boxHFor[e.from];
-      const x2 = cx(e.to), y2 = cy(e.to);
-      const midY = (y1 + y2) / 2;
-      return `<path d="M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}" class="structure-edge" marker-end="url(#arrowhead)"/>`;
-    }).join("");
-
-    const nodeSvg = nodes.map(n => {
-      const p = pos[n.id];
-      if(!p) return "";
-      const boxH = boxHFor[n.id];
-      const x = marginX + p.x * colWidth + (colWidth - boxW)/2;
-      const y = cy(n.id);
-      const cls = typeClass(n.type);
-      const label = escapeHtml(n.label || n.id);
-      const names = namesFor[n.id];
-      const shown = names.slice(0, MAX_NAMES_SHOWN);
-      const extra = names.length - shown.length;
-      const namesHtml = names.length ? `
-        <div class="structure-node-names">
-          ${shown.map(nm => `<div class="structure-node-name">${escapeHtml(nm)}</div>`).join("")}
-          ${extra > 0 ? `<div class="structure-node-name structure-node-name-more">+${extra} more</div>` : ""}
-        </div>` : "";
-      return `
-        <g class="structure-node ${cls}" data-id="${escapeHtml(n.id)}" transform="translate(${x},${y})">
-          <rect width="${boxW}" height="${boxH}" rx="10"></rect>
-          <foreignObject width="${boxW}" height="${boxH}">
-            <div xmlns="http://www.w3.org/1999/xhtml" class="structure-node-box">
-              <div class="structure-node-label">${label}</div>
-              ${namesHtml}
-            </div>
-          </foreignObject>
-        </g>`;
-    }).join("");
-
-    wrap.innerHTML = `
-      <svg viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="xMinYMin meet" class="structure-svg" style="max-width:${svgW}px;min-width:${minReadableW}px">
-        <defs>
-          <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L7,3 z" class="structure-arrow-fill"></path>
-          </marker>
-        </defs>
-        ${edgeSvg}
-        ${nodeSvg}
-      </svg>`;
-  }
-  renderDiagram();
-
-  document.getElementById("refreshStructureBtn").onclick = async () => {
-    const btn = document.getElementById("refreshStructureBtn");
-    btn.disabled = true;
-    btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Refreshing...`;
-    statusEl.style.display = "";
-    statusEl.textContent = "Asking Gemini to infer team structure from all notes and transcripts...";
-    try{
-      await refreshTeamStructureFromNotes();
-      statusEl.style.display = "none";
-      rerenderKeepScroll();
-    }catch(err){
-      statusEl.textContent = "Couldn't refresh team structure: " + err.message;
-    }finally{
-      btn.disabled = false;
-      btn.innerHTML = `<i class="bi bi-arrow-clockwise"></i> Refresh from notes`;
-    }
-  };
 }
 
 /* ---------------- init / project switching ---------------- */
@@ -742,6 +742,49 @@ async function init(){
   document.getElementById("sidebarToggle").onclick = () => {
     sidebarCollapsed = !sidebarCollapsed;
     document.getElementById("appSidebar").classList.toggle("collapsed", sidebarCollapsed);
+  };
+
+  // Settings gear panel
+  setupSettingsPanel();
+}
+
+function setupSettingsPanel(){
+  const panel = document.getElementById("settingsPanel");
+  const keyInput = document.getElementById("apiKeyInput");
+  const statusEl = document.getElementById("keyStatus");
+  const clearBtn = document.getElementById("clearKeyBtn");
+
+  function updateKeyUI(){
+    if(geminiApiKey){
+      statusEl.textContent = "✓ Key configured";
+      statusEl.className = "small mt-1 text-success";
+      clearBtn.style.display = "";
+    } else {
+      statusEl.textContent = "No key configured yet";
+      statusEl.className = "small mt-1 text-secondary";
+      clearBtn.style.display = "none";
+    }
+    keyInput.value = "";
+  }
+  updateKeyUI();
+
+  document.getElementById("settingsBtn").onclick = () => {
+    panel.style.display = panel.style.display === "none" ? "" : "none";
+  };
+  document.getElementById("settingsPanelClose").onclick = () => {
+    panel.style.display = "none";
+  };
+  document.getElementById("saveKeyBtn").onclick = async () => {
+    const val = keyInput.value.trim();
+    if(!val) return;
+    geminiApiKey = val;
+    await saveApiKey(val);
+    updateKeyUI();
+  };
+  clearBtn.onclick = async () => {
+    geminiApiKey = "";
+    await saveApiKey("");
+    updateKeyUI();
   };
 }
 
@@ -851,10 +894,8 @@ function renderSplitSecondary(){
   if(splitNavKey === "notes") renderNotes(body);
   else if(splitNavKey === "chat") renderChat(body);
   else if(splitNavKey === "stakeholders") renderStakeholders(body);
-  else if(splitNavKey === "teamstructure") renderTeamStructure(body);
   else if(splitNavKey === "transcripts") renderTranscripts(body);
   else if(splitNavKey === "importexport") renderImportExport(body);
-  else if(splitNavKey === "apikey") renderApiKeyPage(body);
 }
 
 function renderSplitLayout(){
@@ -1009,7 +1050,9 @@ function loadCurrentState(){
   state.items.forEach(it => {
     if(it.parentId === undefined) it.parentId = null;
     if(it.desc === undefined) it.desc = "";
+    if(!it.tags) it.tags = [];
   });
+  (state.stakeholders || []).forEach(p => { if(!p.tags) p.tags = []; });
   if(!activeItemId || !state.items.find(it => it.id === activeItemId)){
     activeItemId = state.items.length ? state.items[0].id : null;
   }
@@ -1073,16 +1116,13 @@ function renderNav(){
   const el = document.getElementById("navList");
   const navLinkHtml = (s) => `<div class="nav-link ${s.key===activeNav?"active":""}" data-key="${s.key}"><i class="bi ${s.icon} nav-icon"></i><span class="nav-label">${s.name}</span></div>`;
   const refreshRowHtml = `<div class="nav-link" id="refreshAllNavBtn"><i class="bi bi-arrow-clockwise nav-icon"></i><span class="nav-label">Refresh</span></div>`;
-  const apiKeyIdx = NAV.findIndex(s => s.key === "apikey");
-  const before = apiKeyIdx === -1 ? NAV : NAV.slice(0, apiKeyIdx);
-  const after = apiKeyIdx === -1 ? [] : NAV.slice(apiKeyIdx);
-  el.innerHTML = before.map(navLinkHtml).join("") + refreshRowHtml + after.map(navLinkHtml).join("");
+  el.innerHTML = NAV.map(navLinkHtml).join("") + refreshRowHtml;
   el.querySelectorAll(".nav-link[data-key]").forEach(n => { n.onclick = () => goNav(n.dataset.key); });
 
   const refreshBtn = document.getElementById("refreshAllNavBtn");
   refreshBtn.onclick = async () => {
     if(!geminiApiKey){
-      alert("Add a Gemini API key on the API Key page first.");
+      alert("Add a Gemini API key via the ⚙ gear icon in the title bar first.");
       return;
     }
     const icon = refreshBtn.querySelector("i");
@@ -1118,10 +1158,8 @@ function renderSection(){
   if(activeNav === "notes") renderNotes(body);
   else if(activeNav === "chat") renderChat(body);
   else if(activeNav === "stakeholders") renderStakeholders(body);
-  else if(activeNav === "teamstructure") renderTeamStructure(body);
   else if(activeNav === "transcripts") renderTranscripts(body);
   else if(activeNav === "importexport") renderImportExport(body);
-  else if(activeNav === "apikey") renderApiKeyPage(body);
   // If the user navigated to the same page that's in the split pane, close split
   if(splitNavKey && splitNavKey === activeNav) closeSplitView();
 }
@@ -1133,33 +1171,6 @@ function timeAgoLabel(ts){
   const hrs = Math.round(mins/60);
   if(hrs < 24) return hrs + "h ago";
   return Math.round(hrs/24) + "d ago";
-}
-
-/* ---------------- Overview (dashboard + Gemini key settings) ---------------- */
-/* ---------------- API Key (dedicated page) ---------------- */
-function renderApiKeyPage(body){
-  body.innerHTML = `
-    <h2>API Key</h2>
-    <div class="card">
-      <div class="d-flex flex-wrap gap-2 align-items-center">
-        <input type="password" id="apiKeyInput" placeholder="Paste your Gemini API key" style="max-width:320px">
-        <button class="btn btn-sm btn-primary" id="saveKeyBtn">Save key</button>
-        ${geminiApiKey ? `<button class="btn btn-sm btn-outline-danger" id="clearKeyBtn">Remove key</button>` : ""}
-        <span class="small ${geminiApiKey ? "" : "text-secondary"}" id="keyStatus">${geminiApiKey ? "✓ Key configured" : "No key configured yet"}</span>
-      </div>
-    </div>`;
-
-  document.getElementById("saveKeyBtn").onclick = async () => {
-    const val = document.getElementById("apiKeyInput").value.trim();
-    if(!val) return;
-    geminiApiKey = val;
-    await saveApiKey(val);
-    renderSection();
-  };
-  const clearBtn = document.getElementById("clearKeyBtn");
-  if(clearBtn){
-    clearBtn.onclick = async () => { geminiApiKey = ""; await saveApiKey(""); renderSection(); };
-  }
 }
 
 /* ---------------- lightweight live-markdown editor (headings + bullets) ----------------
@@ -1290,6 +1301,78 @@ function moveItemInto(draggedId, newParentId){
   state.items.push(dragged);
 }
 
+/* ---------------- D365 module templates (Step 6) ---------------- */
+const MODULE_TEMPLATES = {
+  "Sales": [
+    "How do leads enter the system today? (web forms, manual, import, marketing automation?)",
+    "What's the current lead qualification process? Who qualifies?",
+    "How are leads assigned to reps? (round-robin, territory, manual?)",
+    "What does the opportunity pipeline look like? How many stages?",
+    "Do you use quotes/proposals? What tool today?",
+    "How is forecasting done? Who owns the forecast?",
+    "What reports does sales leadership look at weekly/monthly?",
+    "Any integrations with other systems? (ERP, CPQ, marketing?)"
+  ],
+  "Customer Service": [
+    "How are cases created today? (email, phone, portal, chat?)",
+    "What's the case categorization / priority model?",
+    "What SLAs exist? Who monitors them?",
+    "How are cases routed and assigned?",
+    "Do agents use a knowledge base? Where does it live today?",
+    "What channels does the team support? (email, phone, chat, social?)",
+    "What reports does the service manager review?",
+    "Any integrations? (telephony, chatbot, portal?)"
+  ],
+  "Field Service": [
+    "What types of work orders exist?",
+    "How is scheduling done today? (manual, automated?)",
+    "Do technicians need mobile/offline access?",
+    "What does the dispatching process look like?",
+    "How are parts/inventory tracked?",
+    "How is travel time / mileage captured?",
+    "What does the customer communication flow look like for appointments?",
+    "Any IoT or remote monitoring involved?"
+  ],
+  "Marketing": [
+    "What marketing tools are in use today?",
+    "How are marketing lists / segments built?",
+    "What types of campaigns do you run? (email, events, nurture?)",
+    "How are leads handed off from marketing to sales?",
+    "What does lead scoring look like (if any)?",
+    "How is campaign ROI / attribution measured?",
+    "Any consent / subscription management in place?",
+    "What integrations exist? (website analytics, social, CMS?)"
+  ],
+  "Project Operations": [
+    "What types of projects does the team deliver?",
+    "How are projects estimated / quoted today?",
+    "How is time tracked? (timesheets, tools?)",
+    "How are expenses submitted and approved?",
+    "What does resource scheduling look like?",
+    "How are projects invoiced? (T&M, fixed price, milestones?)",
+    "What project reporting does leadership need?",
+    "Any existing PSA or PM tools to integrate / replace?"
+  ],
+  "Power Platform": [
+    "Are there any existing Power Apps, Power Automate flows, or Power BI reports?",
+    "What manual processes could benefit from automation?",
+    "Who are the citizen developers / power users?",
+    "What data sources need to be connected?",
+    "Any governance or ALM (application lifecycle management) in place?",
+    "What are the reporting / dashboard requirements?",
+    "Any AI Builder or Copilot use cases identified?"
+  ],
+  "Data & Integration": [
+    "What are the key systems that need to integrate with D365?",
+    "What does the current data landscape look like? (ERP, legacy CRM, spreadsheets?)",
+    "How much historical data needs to migrate?",
+    "What are the data quality concerns?",
+    "Who owns data governance / stewardship?",
+    "What's the desired integration pattern? (real-time, batch, event-driven?)",
+    "Any security / compliance requirements for data handling?"
+  ]
+};
+
 function renderNotes(body){
   body.innerHTML = `
     <h2>Notes</h2>
@@ -1298,6 +1381,7 @@ function renderNotes(body){
         <div class="notebook-rail-label">Teams</div>
         <div class="notebook-rail" id="notebookRail"></div>
         <button class="add-notebook-btn w-100 mt-2" id="addRootItemBtn"><i class="bi bi-plus-circle-fill"></i> New item</button>
+        <button class="add-notebook-btn w-100 mt-1" id="addTemplateItemBtn"><i class="bi bi-file-earmark-plus-fill"></i> From template</button>
       </div>
       <div class="notebook-content" id="notebookContent"></div>
     </div>`;
@@ -1348,8 +1432,7 @@ function renderNotes(body){
       renderSection();
     };
   });
-  // remove (children are re-parented up one level, not deleted, mirroring the
-  // old "remove folder, keep files" behavior)
+  // remove
   rail.querySelectorAll(".tree-row .nb-remove").forEach(x => {
     x.onclick = async (e) => {
       e.stopPropagation();
@@ -1370,12 +1453,9 @@ function renderNotes(body){
     };
   });
 
-  // Drag-and-drop: dropping on the top/bottom sliver of a row reorders the
-  // dragged item next to it (and adopts that row's parent — this is how
-  // dropping between two root-level items also pulls a file out of a
-  // folder); dropping on the middle of a row nests it as that row's child.
+  // Drag-and-drop reordering / nesting
   let dragId = null;
-  const DROP_EDGE = 0.28; // top/bottom fraction of row height treated as reorder zones
+  const DROP_EDGE = 0.28;
   function clearDropClasses(row){ row.classList.remove("tree-drop-target","tree-drop-before","tree-drop-after"); }
   rail.querySelectorAll(".tree-row").forEach(row => {
     row.addEventListener("dragstart", (e) => {
@@ -1426,36 +1506,58 @@ function renderNotes(body){
     dragId = null;
   });
 
+  // New blank item
   document.getElementById("addRootItemBtn").onclick = async () => {
     if(noteFlushFn) noteFlushFn();
     const name = prompt("New item name (e.g. Falcons, Sales, Kickoff notes):");
     if(!name || !name.trim()) return;
-    const it = { id: uid("item"), name: name.trim(), parentId: null, desc: "", ts: Date.now() };
+    const it = { id: uid("item"), name: name.trim(), parentId: null, desc: "", tags: [], ts: Date.now() };
     state.items.push(it);
     activeItemId = it.id;
     await persist();
     renderSection();
   };
 
+  // Step 6: New item from D365 module template
+  document.getElementById("addTemplateItemBtn").onclick = async () => {
+    if(noteFlushFn) noteFlushFn();
+    showTemplatePickerMenu();
+  };
+
   const content = document.getElementById("notebookContent");
   const section = state.items.find(it => it.id === activeItemId);
   if(!section){
-    content.innerHTML = `<div class="empty">No items yet. Use "New item" on the left to create your first one — drag items onto each other to nest them, just like Notion.</div>`;
+    content.innerHTML = `<div class="empty">No items yet. Use "New item" on the left to create your first one, or "From template" to start with D365 module discovery prompts.</div>`;
     return;
   }
 
   const breadcrumb = itemPath(section.id);
   content.innerHTML = `
     <div class="notebook-breadcrumb">${escapeHtml(breadcrumb)}</div>
-    <div class="d-flex justify-content-between align-items-center mb-2">
+    <div class="d-flex justify-content-between align-items-center mb-1">
       <h3 style="font-size:16px;margin:0"><i class="bi bi-file-earmark-text-fill"></i> ${escapeHtml(section.name)}</h3>
       <span class="autosave-indicator" id="autosaveIndicator"></span>
+    </div>
+    <div class="note-tags-row mb-2">
+      <span class="text-secondary small">Tags:</span>
+      <input type="text" class="form-control form-control-sm d-inline-block" id="noteTagsInput"
+             value="${escapeHtml((section.tags||[]).join(", "))}"
+             placeholder="e.g. lead-routing, SLA, data-quality" style="max-width:320px;vertical-align:middle">
+      ${(section.tags||[]).length ? `<span class="note-tag-pills">${(section.tags||[]).map(t => `<span class="tag-pill">${escapeHtml(t)}</span>`).join(" ")}</span>` : ""}
     </div>
     <div id="notesDescEditor" class="big-textarea md-editor" contenteditable="true"></div>`;
 
   const descEditor = document.getElementById("notesDescEditor");
   const indicator = document.getElementById("autosaveIndicator");
   mdInitEditor(descEditor, section.desc);
+
+  // Tags input save
+  const tagsInput = document.getElementById("noteTagsInput");
+  tagsInput.onchange = async () => {
+    section.tags = parseTags(tagsInput.value);
+    await persist();
+    rerenderKeepScroll();
+  };
 
   let saveTimer = null;
   let lastSavedText = section.desc || "";
@@ -1476,6 +1578,63 @@ function renderNotes(body){
     clearTimeout(saveTimer);
     saveTimer = setTimeout(flushNotesEditor, 700);
   });
+}
+
+/* Template picker menu (Step 6) */
+function showTemplatePickerMenu(){
+  closeTemplatePickerMenu();
+  const btn = document.getElementById("addTemplateItemBtn");
+  const rect = btn.getBoundingClientRect();
+  const menu = document.createElement("div");
+  menu.className = "template-picker-menu";
+  menu.id = "templatePickerMenu";
+  menu.innerHTML = `
+    <div class="template-picker-title">Create from D365 module template</div>
+    ${Object.keys(MODULE_TEMPLATES).map(mod => `
+      <div class="template-picker-item" data-module="${escapeHtml(mod)}">
+        <i class="bi bi-file-earmark-plus-fill"></i> ${escapeHtml(mod)}
+      </div>`).join("")}
+    <div class="template-picker-item" data-module="__blank__">
+      <i class="bi bi-file-earmark"></i> Blank (custom name)
+    </div>`;
+  menu.style.position = "fixed";
+  menu.style.left = (rect.right + 8) + "px";
+  menu.style.top = rect.top + "px";
+  document.body.appendChild(menu);
+  // Adjust if off-screen
+  const mr = menu.getBoundingClientRect();
+  if(mr.right > window.innerWidth) menu.style.left = (rect.left - mr.width - 8) + "px";
+  if(mr.bottom > window.innerHeight) menu.style.top = (window.innerHeight - mr.height - 8) + "px";
+
+  menu.querySelectorAll(".template-picker-item").forEach(item => {
+    item.onclick = async () => {
+      closeTemplatePickerMenu();
+      const mod = item.dataset.module;
+      if(mod === "__blank__"){
+        const name = prompt("Item name:");
+        if(!name || !name.trim()) return;
+        const it = { id: uid("item"), name: name.trim(), parentId: null, desc: "", tags: [], ts: Date.now() };
+        state.items.push(it);
+        activeItemId = it.id;
+      } else {
+        const prompts = MODULE_TEMPLATES[mod] || [];
+        const desc = prompts.map(q => `- ${q}`).join("\n");
+        const it = { id: uid("item"), name: mod, parentId: null, desc, tags: [mod.toLowerCase().replace(/\s+&\s+/g,"-").replace(/\s+/g,"-")], ts: Date.now() };
+        state.items.push(it);
+        activeItemId = it.id;
+      }
+      await persist();
+      renderSection();
+    };
+  });
+
+  setTimeout(() => {
+    document.addEventListener("click", closeTemplatePickerMenu, { once: true });
+  }, 0);
+}
+function closeTemplatePickerMenu(){
+  const old = document.getElementById("templatePickerMenu");
+  if(old) old.remove();
 }
 
 /* ---------------- Transcripts (flat, project-wide call log) ----------------
